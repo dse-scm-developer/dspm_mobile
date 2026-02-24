@@ -21,6 +21,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _loadUser() async {
     final name = await AppSession.userNm();
+    debugPrint("DSPMERROR: ${name}");
     setState(() {
       _userNm = name ?? "";
     });

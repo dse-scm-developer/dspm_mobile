@@ -12,7 +12,12 @@ dependencies:
   cookie_jar: ^4.0.8
   dio_cookie_manager: ^3.1.1
   shared_preferences: ^2.2.2
+  url_launcher: ^6.3.0
+  app_links: ^6.3.2
+  month_year_picker: 0.5.0+1
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
 
 dev_dependencies:

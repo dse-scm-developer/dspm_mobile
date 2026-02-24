@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:month_year_picker/month_year_picker.dart';
 import '/ui/login_page.dart';
 
 void main() {
@@ -14,6 +16,16 @@ class MainApp extends StatelessWidget {
       title: 'DSPM',
       theme: ThemeData(primarySwatch: Colors.blue),
       home: LoginPage(), // 시작 화면을 로그인 페이지로 설정
+      localizationsDelegates: const [
+        MonthYearPickerLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('ko'),
+        Locale('en'),
+      ],
     );
   }
 }

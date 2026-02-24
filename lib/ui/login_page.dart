@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:app_links/app_links.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import '/core/config/env.dart';
 import '/features/auth/controller/auth_controller.dart';
+import '../../../core/network/session_dio.dart'; 
+import '../../core/storage/app_session.dart';
 import 'home_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -12,12 +20,57 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _userIdController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _appLinks = AppLinks();
+  StreamSubscription<Uri>? _linkSub;
 
   bool _isLoading = false; 
   bool _obscure = true;
 
   @override
+  void initState() {
+    super.initState();
+
+    _linkSub = _appLinks.uriLinkStream.listen((uri) async {
+      if (uri.scheme == 'dspm' && uri.host == 'login' && uri.path == '/success') {
+        final code = uri.queryParameters['code'];
+        if (code == null || code.isEmpty) return;
+
+        try {
+          setState(() => _isLoading = true);
+
+          final res = await SessionDio.dio.post('/th/mobile/oauthLogin', data: {'code': code});
+          final data = res.data;
+
+          if (data['success'] != true) {
+            throw Exception((data['message'] ?? '로그인 실패').toString());
+          }
+
+          await AppSession.save(
+            userId: data["userId"].toString(),
+            userNm: data["userNm"].toString(),
+            langCd: data["langCd"].toString(),
+            companyList: data["companyList"] ?? [],
+            buList: data["buList"] ?? [],
+          );
+
+          if (!mounted) return;
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomePage()));
+        } catch (e) {
+          if (!mounted) return;
+          //debugPrint("DSPMERROR: ${e.toString()}");
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+          );
+        } finally {
+          if (mounted) setState(() => _isLoading = false);
+        }
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _linkSub?.cancel();
     _userIdController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -78,9 +131,25 @@ class _LoginPageState extends State<LoginPage> {
           SizedBox(
             height: 44,
             child: InkWell(
-              onTap: () {
-                // Microsoft 로그인 로직 연결
-              },
+              onTap: _isLoading
+              ? null
+              : () async {
+                  setState(() => _isLoading = true);
+                  try {
+                    final url = Uri.parse('${Env.baseUrl}/th/mobile/oauth2/authorization/azure');
+                    final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
+                    if (!ok) {
+                      throw Exception('브라우저를 열 수 없습니다.');
+                    }
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(e.toString().replaceFirst("Exception: ", ""))),
+                    );
+                  } finally {
+                    if (mounted) setState(() => _isLoading = false);
+                  }
+                },
               borderRadius: BorderRadius.circular(12),
               child: Container(
                 decoration: BoxDecoration(

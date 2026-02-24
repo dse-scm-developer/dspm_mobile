@@ -58,4 +58,16 @@ class AppSession {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
   }
+
+  static Future<String> company() async {
+    final list = await companyList();
+    if (list.isEmpty) return "";
+    return Map<String, dynamic>.from(list[0])["CODE_CD"]?.toString() ?? "";
+  }
+
+  static Future<String> bu() async {
+    final list = await buList();
+    if (list.isEmpty) return "";
+    return Map<String, dynamic>.from(list[0])["CODE_CD"]?.toString() ?? "";
+  }
 }

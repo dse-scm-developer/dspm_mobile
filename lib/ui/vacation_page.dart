@@ -17,8 +17,10 @@ class _VacationPageState extends State<VacationPage> {
   DateTime? _startDate;
   DateTime? _endDate;
   double _days = 0;
+  double _remainDays = 0;
 
-  String _userBu = "";
+  String _startDateStr = "";
+  String _endDateStr = "";
   
   final _contentController = TextEditingController();
 
@@ -32,14 +34,14 @@ class _VacationPageState extends State<VacationPage> {
     try {
       final userBu = await _loadUserBu();     // ✅ 먼저 BU 구함
       final vacTypes = await _loadVacTypes();
-
+      final remainDays = await _loadRemainDays();
 
       if (!mounted) return;
       setState(() {
-        _userBu = userBu;
         _vacTypeList = vacTypes;
         _vacTypeCd = vacTypes.isNotEmpty ? (vacTypes.first["CODE_CD"] ?? "").toString() : null;
         _vacTypeLoading = false;
+        _remainDays = remainDays;
       });
     } catch (e) {
       if (!mounted) return;
@@ -51,18 +53,11 @@ class _VacationPageState extends State<VacationPage> {
   }
 
   Future<String> _loadUserBu() async {
-    final buList = await AppSession.buList();
-    if (buList.isEmpty) return "";
-
-    final first = buList.first;
-    if (first is Map) {
-      return (first["CODE_NM"] ?? first["CODE_CD"] ?? "").toString();
-    }
-    return first.toString();
+    return await AppSession.bu();
   }
 
   Future<List<Map<String, dynamic>>> _loadVacTypes() async {
-    final list = await BizService.searchList(
+    final list = await BizService.search(
       siq: "common.comCode", // 교체
       outDs: "vacTypeList",
       params: {
@@ -84,6 +79,29 @@ class _VacationPageState extends State<VacationPage> {
     return filtered;
   }
 
+  Future<double> _loadRemainDays() async {
+    final userId = (await AppSession.userId()) ?? "";
+    final company = await AppSession.company(); 
+    final bu = await AppSession.bu();
+
+    final list = await BizService.search(
+      siq: "master.vacationHdr",   
+      outDs: "remainDs",
+      params: {
+        "GV_USER_ID": userId,
+        "GV_COMPANY_CD": company,
+        "GV_BU_CD": bu,
+        "year": DateTime.now().year.toString(),
+        "empId": userId,
+      },
+    );
+
+    final first = list.isNotEmpty ? list.first : {};
+    final v = first["VACATION_REMAIN"];
+
+    return double.tryParse((v ?? "0").toString()) ?? 0;
+  }
+
 
   Future<void> _pickStartDate() async {
     final picked = await showDatePicker(
@@ -96,6 +114,7 @@ class _VacationPageState extends State<VacationPage> {
     if (picked != null) {
       setState(() {
         _startDate = picked;
+        _startDateStr = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
         _calculateDays();
       });
     }
@@ -119,6 +138,7 @@ class _VacationPageState extends State<VacationPage> {
     if (picked != null) {
       setState(() {
         _endDate = picked;
+        _endDateStr = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
         _calculateDays();
       });
     }
@@ -139,6 +159,41 @@ class _VacationPageState extends State<VacationPage> {
       final diff = _endDate!.difference(_startDate!).inDays + 1;
       _days = diff > 0 ? diff.toDouble() : 0;
     }
+  }
+
+  bool _validateBeforeSubmit() {
+    if (_startDate == null) {
+      _showMsg('시작일을 선택해 주세요.');
+      return false;
+    }
+
+    if (_endDate == null) {
+      _showMsg('종료일을 선택해 주세요.');
+      return false;
+    }
+
+    if (_endDate!.isBefore(_startDate!)) {
+      _showMsg('종료일은 시작일보다 빠를 수 없습니다.');
+      return false;
+    }
+
+    if (_days > _remainDays) {
+      _showMsg('잔여 휴가일수를 초과했습니다.\n잔여: $_remainDays일, 신청: $_days일');
+      return false;
+    }
+
+    if (_days > 5) {
+      _showMsg('휴가 신청 일수는 5일을 초과할 수 없습니다.\n초과되는 일수는 행을 추가해서 작성해주세요.');
+      return false;
+    }
+
+    return true;
+  }
+
+  void _showMsg(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
   }
 
   @override
@@ -221,12 +276,42 @@ class _VacationPageState extends State<VacationPage> {
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("휴가 신청이 완료되었습니다."),
-                        ),
+                    onPressed: () async {
+                      if (!_validateBeforeSubmit()) return;
+
+                      final _userId = (await AppSession.userId()).toString();
+                      final _companyCd = await AppSession.company();
+                      final _buCd = await AppSession.bu();
+                      final res = await BizService.saveVacation(
+                        siq: "master.vacationDtl",     // ✅ 메일 데이터 조회용 siq (서버에서 sqlId로 사용)
+                        outDs: "saveCnt",
+                        rows: [
+                          {
+                            "state": "inserted",
+                            "COMPANY_CD": _companyCd,
+                            "BU_CD": _buCd,
+                            "USER_ID": _userId,
+                            "VACATION_START_DATE": _startDateStr,
+                            "VACATION_END_DATE": _endDateStr,
+                            "VACATION_DIVISION": _vacTypeCd,
+                            "VACATION_USE": _days,
+                            "VACATION_DESC": _contentController.text,
+                          }
+                        ],
+                        extraParams: {
+                        },
                       );
+                      debugPrint("DSPMERROR: ${_userId}");
+                      debugPrint("DSPMERROR: ${res}");
+                      if (res['success'] == true) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(res['message'])),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(res['message'])),
+                        );
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2F6BFF),
@@ -346,4 +431,6 @@ class _VacationPageState extends State<VacationPage> {
       ),
     );
   }
+
+ 
 }

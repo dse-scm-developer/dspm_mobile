@@ -1,6 +1,9 @@
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../service/auth_service.dart';
 import '../../../core/storage/app_session.dart';
+import '../../../core/network/session_dio.dart';
 
 class AuthController {
   /// 세션/리다이렉트 기반 로그인 성공 여부를 302 Location으로 판정
