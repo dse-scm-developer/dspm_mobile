@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/storage/app_session.dart';
 import 'vacation_page.dart';
 import 'work_log_page.dart';
+import 'receipt_page.dart';
 
 class HomePage extends StatefulWidget  {
   const HomePage({super.key});
@@ -111,7 +112,14 @@ class _HomePageState extends State<HomePage> {
                     icon: Icons.payments_outlined,
                     title: "경비 신청",
                     color: const Color(0xFFFF9800),
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ReceiptPage(),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

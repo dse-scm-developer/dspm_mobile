@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/cupertino.dart';
 import '../../../core/config/env.dart';
 import '../../../core/network/session_dio.dart';
 import 'tran_data.dart';
@@ -62,6 +63,8 @@ class BizService {
       "tranData": tranList.map((e) => e.toJson()).toList(),
     };
 
+    debugPrint("REQ url = ${Env.mobilePath}biz/obj");
+    debugPrint("REQ payload = $payload");
     final Response res =
         await SessionDio.dio.post(Env.mobilePath + "search", data: payload);
 
