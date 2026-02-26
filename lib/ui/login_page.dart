@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:app_links/app_links.dart';
 import 'dart:async';
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import '/core/config/env.dart';
 import '/features/auth/controller/auth_controller.dart';
 import '../../../core/network/session_dio.dart'; 
