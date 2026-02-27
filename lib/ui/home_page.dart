@@ -3,7 +3,9 @@ import '../../core/storage/app_session.dart';
 import 'vacation_page.dart';
 import 'work_log_page.dart';
 import 'privacy_policy_page.dart';
-class HomePage extends StatefulWidget {
+import 'receipt_page.dart';
+
+class HomePage extends StatefulWidget  {
   const HomePage({super.key});
 
   @override
@@ -95,7 +97,6 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
               sliver: SliverGrid(
@@ -133,7 +134,14 @@ class _HomePageState extends State<HomePage> {
                       icon: Icons.payments_outlined,
                       title: "경비 신청",
                       color: const Color(0xFFFF9800),
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ReceiptPage(),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
