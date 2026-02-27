@@ -94,6 +94,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
 
   // 경비내역 조회
   Future<void> _loadReceipts() async {
+    final userId = (await AppSession.userId() ?? "").trim();
     setState(() {
       _loading = true;
       _selectedIdx.clear();
@@ -105,8 +106,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         outDs: "rtnList",
         params: {
           "year": widget.yearMonth.substring(0, 4),
-          "empId": _empId,
-          "SEARCH_USER_ID": _empId,
+          "userId": userId,
           "sql": "N",
           "gvSubTotal": "Sub Total",
           "gvTotal": "Total",

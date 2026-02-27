@@ -83,7 +83,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
           outDs: "rtnList",
           params: {
             "empId": userId,
-            "SEARCH_USER_ID": userId,
+            "userId": userId,
             "yearMonth": yearMonth,
             "project": projectCd,
             "expenseCode": "", // 전체 조회
