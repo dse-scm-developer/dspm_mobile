@@ -256,31 +256,60 @@ class _ReceiptPageState extends State<ReceiptPage> {
 
   Widget _buildTotalCard() {
     final mm = DateFormat("MM").format(_month);
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 18),
+      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 18),
       decoration: BoxDecoration(
-        color: const Color(0xFFE8EAF6),
-        borderRadius: BorderRadius.circular(18),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE6EDF6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 25,
+            offset: const Offset(0, 12),
+          ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            "$mm월 경비 총액",
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF616161),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2F6BFF).withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.payments_outlined,
+              color: Color(0xFF2F6BFF),
+              size: 26,
             ),
           ),
-          const SizedBox(height: 10),
-          Text(
-            "총 ${NumberFormat('#,###').format(_totalPrice)}원",
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF3F51B5),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "$mm월 경비 총액",
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1E2A3B),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "${NumberFormat('#,###').format(_totalPrice)}원",
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF2F6BFF),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

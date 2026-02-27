@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/storage/app_session.dart';
 import '/features/biz/service/biz_service.dart';
+import '../../core/theme/app_theme.dart';
 
 class VacationPage extends StatefulWidget {
   const VacationPage({super.key});
@@ -21,7 +22,7 @@ class _VacationPageState extends State<VacationPage> {
 
   String _startDateStr = "";
   String _endDateStr = "";
-  
+
   final _contentController = TextEditingController();
 
   @override
@@ -32,7 +33,7 @@ class _VacationPageState extends State<VacationPage> {
 
   Future<void> _init() async {
     try {
-      final userBu = await _loadUserBu();     // ✅ 먼저 BU 구함
+      await _loadUserBu(); // ✅ 먼저 BU 구함 (현재 값은 사용 안하지만 유지)
       final vacTypes = await _loadVacTypes();
       final remainDays = await _loadRemainDays();
 
@@ -58,7 +59,7 @@ class _VacationPageState extends State<VacationPage> {
 
   Future<List<Map<String, dynamic>>> _loadVacTypes() async {
     final list = await BizService.search(
-      siq: "common.comCode", // 교체
+      siq: "common.comCode",
       outDs: "vacTypeList",
       params: {
         "grpCd": "WORK_LOC_CODE",
@@ -81,11 +82,11 @@ class _VacationPageState extends State<VacationPage> {
 
   Future<double> _loadRemainDays() async {
     final userId = (await AppSession.userId()) ?? "";
-    final company = await AppSession.company(); 
+    final company = await AppSession.company();
     final bu = await AppSession.bu();
 
     final list = await BizService.search(
-      siq: "master.vacationHdr",   
+      siq: "master.vacationHdr",
       outDs: "remainDs",
       params: {
         "GV_USER_ID": userId,
@@ -98,10 +99,8 @@ class _VacationPageState extends State<VacationPage> {
 
     final first = list.isNotEmpty ? list.first : {};
     final v = first["VACATION_REMAIN"];
-
     return double.tryParse((v ?? "0").toString()) ?? 0;
   }
-
 
   Future<void> _pickStartDate() async {
     final picked = await showDatePicker(
@@ -109,12 +108,27 @@ class _VacationPageState extends State<VacationPage> {
       initialDate: DateTime.now(),
       firstDate: DateTime(2024),
       lastDate: DateTime(2030),
+      // ✅ 다이얼로그에도 AppTheme 톤 반영
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: AppTheme.primary,
+                  onPrimary: Colors.white,
+                  surface: Colors.white,
+                  onSurface: AppTheme.ink,
+                ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked != null) {
       setState(() {
         _startDate = picked;
-        _startDateStr = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+        _startDateStr =
+            "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
         _calculateDays();
       });
     }
@@ -131,14 +145,28 @@ class _VacationPageState extends State<VacationPage> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _startDate!,
-      firstDate: _startDate!, // ✅ 시작일 이전 선택 못함
+      firstDate: _startDate!,
       lastDate: DateTime(2100),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: AppTheme.primary,
+                  onPrimary: Colors.white,
+                  surface: Colors.white,
+                  onSurface: AppTheme.ink,
+                ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked != null) {
       setState(() {
         _endDate = picked;
-        _endDateStr = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+        _endDateStr =
+            "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
         _calculateDays();
       });
     }
@@ -146,12 +174,12 @@ class _VacationPageState extends State<VacationPage> {
 
   void _calculateDays() {
     if (_startDate != null && _endDate != null) {
-      if (_vacTypeCd == "101") { // 휴가(대체근무)
+      if (_vacTypeCd == "101") {
         _days = 0;
         return;
       }
 
-      if (_vacTypeCd == "104") { // 휴가(반차)
+      if (_vacTypeCd == "104") {
         _days = (_endDate!.difference(_startDate!).inDays + 1) * 0.5;
         return;
       }
@@ -204,93 +232,94 @@ class _VacationPageState extends State<VacationPage> {
 
   @override
   Widget build(BuildContext context) {
+    final maxWidth = MediaQuery.of(context).size.width < 520
+        ? double.infinity
+        : 520.0;
+
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          "휴가 신청",
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF1E2A3B),
-          ),
-        ),
-        iconTheme: const IconThemeData(color: Color(0xFF1E2A3B)),
+        title: const Text("휴가 신청"),
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: _buildFormCard(context),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+  
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(),
+          const SizedBox(height: 18),
+
+          _buildLabel("구분"),
+          const SizedBox(height: 8),
+          _buildVacTypeDropdown(),
+
+          const SizedBox(height: 18),
+
+          _buildLabel("시작일"),
+          const SizedBox(height: 8),
+          _buildDateField(_startDate, () => _pickStartDate()),
+
+          const SizedBox(height: 18),
+
+          _buildLabel("종료일"),
+          const SizedBox(height: 8),
+          _buildDateField(_endDate, () => _pickEndDate()),
+
+          const SizedBox(height: 18),
+
+          _buildLabel("신청 일수"),
+          const SizedBox(height: 8),
+          _buildReadOnlyField("${_days.toStringAsFixed(1)} 일"),
+
+          const SizedBox(height: 18),
+
+          _buildLabel("신청 내용"),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _contentController,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              hintText: "신청 내용을 입력하세요",
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          ),
 
-                _buildLabel("구분"),
-                const SizedBox(height: 8),
-                _buildVacTypeDropdown(),
+          const SizedBox(height: 22),
 
-                const SizedBox(height: 20),
-
-                _buildLabel("시작일"),
-                const SizedBox(height: 8),
-                _buildDateField(_startDate, () => _pickStartDate()),
-
-                const SizedBox(height: 20),
-
-                _buildLabel("종료일"),
-                const SizedBox(height: 8),
-                _buildDateField(_endDate, () => _pickEndDate()),
-
-                const SizedBox(height: 20),
-
-                _buildLabel("신청 일수"),
-                const SizedBox(height: 8),
-                _buildReadOnlyField("${_days.toStringAsFixed(1)} 일"),
-
-                const SizedBox(height: 20),
-
-                _buildLabel("신청 내용"),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _contentController,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    hintText: "신청 내용을 입력하세요",
-                    filled: true,
-                    fillColor: const Color(0xFFF6F8FB),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 30),
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: () async {
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: _vacTypeLoading
+                  ? null
+                  : () async {
                       if (!_validateBeforeSubmit()) return;
 
-                      final _userId = (await AppSession.userId()).toString();
-                      final _companyCd = await AppSession.company();
-                      final _buCd = await AppSession.bu();
+                      final userId = (await AppSession.userId()).toString();
+                      final companyCd = await AppSession.company();
+                      final buCd = await AppSession.bu();
+
                       final res = await BizService.saveVacation(
-                        siq: "master.vacationDtl",     // ✅ 메일 데이터 조회용 siq (서버에서 sqlId로 사용)
+                        siq: "master.vacationDtl",
                         outDs: "saveCnt",
                         rows: [
                           {
                             "state": "inserted",
-                            "COMPANY_CD": _companyCd,
-                            "BU_CD": _buCd,
-                            "USER_ID": _userId,
+                            "COMPANY_CD": companyCd,
+                            "BU_CD": buCd,
+                            "USER_ID": userId,
                             "VACATION_START_DATE": _startDateStr,
                             "VACATION_END_DATE": _endDateStr,
                             "VACATION_DIVISION": _vacTypeCd,
@@ -298,41 +327,60 @@ class _VacationPageState extends State<VacationPage> {
                             "VACATION_DESC": _contentController.text,
                           }
                         ],
-                        extraParams: {
-                        },
+                        extraParams: const {},
                       );
-                      debugPrint("DSPMERROR: ${_userId}");
-                      debugPrint("DSPMERROR: ${res}");
-                      if (res['success'] == true) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(res['message'])),
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(res['message'])),
-                        );
-                      }
+
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text((res['message'] ?? '').toString())),
+                      );
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2F6BFF),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: const Text(
-                      "신청하기",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              child: const Text("신청하기"),
             ),
           ),
-        ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    // ✅ 상단 상태(잔여 휴가) 배지 느낌으로 추가 — 톤은 Home 스타일
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.softBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.beach_access_rounded, color: AppTheme.primary, size: 18),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              "휴가 신청서",
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                color: AppTheme.ink,
+              ),
+            ),
+          ),
+          Text(
+            "잔여 ${_remainDays.toStringAsFixed(1)}일",
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              color: AppTheme.primary,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -341,25 +389,22 @@ class _VacationPageState extends State<VacationPage> {
     return Text(
       text,
       style: const TextStyle(
-        fontWeight: FontWeight.w700,
-        color: Color(0xFF1E2A3B),
+        fontWeight: FontWeight.w800,
+        color: AppTheme.ink,
       ),
     );
   }
 
   Widget _buildVacTypeDropdown() {
     if (_vacTypeLoading) {
-      return Container(
-        height: 56,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const SizedBox(
-          width: 18,
-          height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2),
+      return const SizedBox(
+        height: 52, // TextField 기본 높이와 맞춤
+        child: Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
         ),
       );
     }
@@ -377,60 +422,47 @@ class _VacationPageState extends State<VacationPage> {
       onChanged: (value) {
         setState(() {
           _vacTypeCd = value;
-          _calculateDays();   // ✅ 구분 바뀌면 재계산
+          _calculateDays();
         });
       },
-      decoration: InputDecoration(
-        filled: true,
-        fillColor: const Color(0xFFF8FAFC),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
+      decoration: const InputDecoration(
+        hintText: "구분 선택",
+        prefixIcon: Icon(Icons.category_outlined), // 선택사항
       ),
     );
   }
 
-
   Widget _buildDateField(DateTime? date, VoidCallback onTap) {
-    return InkWell(
+    final text = date == null
+        ? ""
+        : "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+
+    final controller = TextEditingController(text: text);
+
+    return TextFormField(
+      controller: controller,
+      readOnly: true,
       onTap: onTap,
-      child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        alignment: Alignment.centerLeft,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF6F8FB),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Text(
-          date == null
-              ? "날짜 선택"
-              : "${date.year}-${date.month}-${date.day}",
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
+      decoration: const InputDecoration(
+        hintText: "날짜 선택",
+        prefixIcon: Icon(Icons.calendar_month_outlined),
       ),
     );
   }
 
   Widget _buildReadOnlyField(String value) {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF6F8FB),
-        borderRadius: BorderRadius.circular(14),
+    final controller = TextEditingController(text: value);
+    return TextFormField(
+      controller: controller,
+      readOnly: true,
+      decoration: const InputDecoration(
+        // hintText 필요 없으면 생략 가능
+        prefixIcon: Icon(Icons.timelapse_rounded), // 아이콘 싫으면 제거
       ),
-      child: Text(
-        value,
-        style: const TextStyle(
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF2F6BFF),
-        ),
+      style: const TextStyle(
+        fontWeight: FontWeight.w900,
+        color: AppTheme.primary,
       ),
     );
   }
-
- 
 }
