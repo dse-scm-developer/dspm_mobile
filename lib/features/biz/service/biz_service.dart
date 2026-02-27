@@ -62,9 +62,7 @@ class BizService {
       ...sp,
       "tranData": tranList.map((e) => e.toJson()).toList(),
     };
-
-    debugPrint("REQ url = ${Env.mobilePath}biz/obj");
-    debugPrint("REQ payload = $payload");
+    
     final Response res =
         await SessionDio.dio.post(Env.mobilePath + "search", data: payload);
 

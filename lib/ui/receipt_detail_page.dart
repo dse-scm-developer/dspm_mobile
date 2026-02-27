@@ -184,7 +184,10 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
                 top: 8,
                 left: 8,
                 child: IconButton(
-                  onPressed: () => _downloadImage(bytes),
+                  onPressed: () {
+                    _downloadImage(bytes);
+                    Navigator.pop(context);
+                  },
                   icon: const Icon(Icons.download, color: Colors.white, size: 28),
                 ),
               ),
@@ -277,186 +280,212 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
         androidRelativePath: "Pictures/Receipts",
       );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("갤러리에 저장이 완료되었습니다."))
-        );
-      }
+      if (mounted) _showMsg("갤러리에 저장이 완료되었습니다.");
+      
     } catch (e) {
       debugPrint("다운로드 실패 에러: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("저장에 실패했습니다."))
-        );
-      }
+      if (mounted) _showMsg("저장 실패");
     }
+  }
+
+  void _showMsg(String msg) {
+    ScaffoldMessenger.of(context).removeCurrentSnackBar(); // 기존 snackbar 삭제
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          msg,
+          style: const TextStyle(
+              fontSize: 16,
+              color: Colors.white
+          ),
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.black87,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height * 0.1,
+          left: 20,
+          right: 20,
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("영수증 상세"),
         backgroundColor: Colors.white,
         elevation: 0,
+        title: const Text(
+          "경비 상세",
+          style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF1E2A3B)),
+        ),
+        iconTheme: const IconThemeData(color: Color(0xFF1E2A3B)),
       ),
+      resizeToAvoidBottomInset: true,
       body: _loadingCodes
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildImageSection(),
-              const SizedBox(height: 16),
-              _buildInputCard(),
-              const SizedBox(height: 24),
-              _buildSaveButton(),
+              const SizedBox(height: 32),
+
+              _buildLabel("경비일자"),
+              const SizedBox(height: 8),
+              _buildDateField(),
+
+              const SizedBox(height: 20),
+
+              _buildLabel("경비 항목"),
+              const SizedBox(height: 8),
+              _buildExpTypeDropdown(),
+
+              const SizedBox(height: 20),
+
+              _buildLabel("개인/법인"),
+              const SizedBox(height: 8),
+              _buildCreditTypeDropdown(),
+
+              const SizedBox(height: 20),
+
+              _buildLabel("금액"),
+              const SizedBox(height: 8),
+              _buildPriceField(),
+
+              const SizedBox(height: 20),
+
+              _buildLabel("내용"),
+              const SizedBox(height: 8),
+              _buildContentsField(),
+
+              const SizedBox(height: 40),
             ],
           ),
+        ),
+      ),
+      bottomNavigationBar: _buildSaveButton(),
+    );
+  }
+
+  Widget _buildLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1E2A3B)),
+    );
+  }
+
+  Widget _buildDateField() {
+    return InkWell(
+      onTap: _pickDate,
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(color: const Color(0xFFF6F8FB), borderRadius: BorderRadius.circular(14)),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(_dateCtrl.text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const Icon(Icons.calendar_today, size: 20, color: Colors.grey),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildInputCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-      child: Column(
-        children: [
-          TextFormField(
-            controller: _dateCtrl,
-            readOnly: true,
-            decoration: const InputDecoration(
-              labelText: "사용일자",
-              suffixIcon: Icon(Icons.calendar_today),
-            ),
-            onTap: _pickDate,
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            value: _selectedExpCd,
-            decoration: const InputDecoration(labelText: "경비 항목"),
-            items: _expenseCodes
-                .map((c) => DropdownMenuItem(value: c.codeCd, child: Text(c.codeNm)))
-                .toList(),
-            onChanged: (v) => setState(() => _selectedExpCd = v ?? ""),
-          ),
-          DropdownButtonFormField<String>(
-            value: _selectedCreditCd,
-            decoration: const InputDecoration(labelText: "결제 구분"),
-            items: _creditOptions
-                .map((val) => DropdownMenuItem(value: val, child: Text(val)))
-                .toList(),
-            onChanged: (v) => setState(() => _selectedCreditCd = v ?? "개인"),
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _priceCtrl,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: "금액", suffixText: "원"),
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _contentsCtrl,
-            decoration: const InputDecoration(labelText: "내용"),
-          ),
-        ],
+  Widget _buildExpTypeDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedExpCd.isEmpty ? null : _selectedExpCd,
+      items: _expenseCodes.map((c) => DropdownMenuItem(value: c.codeCd, child: Text(c.codeNm))).toList(),
+      onChanged: (v) => setState(() => _selectedExpCd = v ?? ""),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: const Color(0xFFF6F8FB),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
       ),
     );
   }
 
+  Widget _buildCreditTypeDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedCreditCd,
+      items: _creditOptions.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+      onChanged: (v) => setState(() => _selectedCreditCd = v ?? "개인"),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: const Color(0xFFF6F8FB),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      ),
+    );
+  }
+
+  Widget _buildPriceField() {
+    return TextFormField(
+      controller: _priceCtrl,
+      keyboardType: TextInputType.number,
+      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2F6BFF)),
+      decoration: InputDecoration(
+        suffixText: "원",
+        filled: true,
+        fillColor: const Color(0xFFF6F8FB),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      ),
+    );
+  }
+
+  Widget _buildContentsField() {
+    return TextFormField(
+      controller: _contentsCtrl,
+      maxLines: 3,
+      decoration: InputDecoration(
+        hintText: "내용을 입력하세요",
+        filled: true,
+        fillColor: const Color(0xFFF6F8FB),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      ),
+    );
+  }
+
+// 영수증 영역
   Widget _buildImageSection() {
     final recSeq = widget.receiptData?['REC_SEQ']?.toString() ?? "";
-
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text("영수증 첨부", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 12),
-
-          if (_loadingFiles) const LinearProgressIndicator(),
-
-          // 서버에 저장된 썸네일들
-          if (recSeq.isNotEmpty && _serverFiles.isNotEmpty) ...[
-            SingleChildScrollView(
+          const SizedBox(height: 16),
+          if (_loadingFiles) const Padding(
+            padding: EdgeInsets.only(bottom: 8.0),
+            child: LinearProgressIndicator(),
+          ),
+          SizedBox(
+            height: 110,
+            child: ListView(
               scrollDirection: Axis.horizontal,
-              child: Row(
-                children: List.generate(_serverFiles.length, (index) {
-                  final f = _serverFiles[index];
-                  final fileSeq = (f['FILE_SEQ'] ?? '').toString();
-
-                  return FutureBuilder<Uint8List>(
-                    future: ReceiptFileService.downloadBytes(
-                      projectCd: widget.projectCd,
-                      dtlRecSeq: recSeq,
-                      fileSeq: fileSeq,
-                    ),
-                    builder: (context, snap) {
-                      if (!snap.hasData) {
-                        return Container(
-                          margin: const EdgeInsets.only(right: 12),
-                          width: 80,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[200],
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                        );
-                      }
-
-                      final bytes = snap.data!;
-                      return Stack(
-                        children: [
-                          GestureDetector(
-                            onTap: () => _openPreview(bytes),
-                            child: Container(
-                              margin: const EdgeInsets.only(right: 12),
-                              width: 80,
-                              height: 100,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(10),
-                                image: DecorationImage(
-                                  image: MemoryImage(bytes),
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 0,
-                            right: 8,
-                            child: GestureDetector(
-                              onTap: () => _markDeleteServerFile(index),
-                              child: const CircleAvatar(
-                                radius: 10,
-                                backgroundColor: Colors.black54,
-                                child: Icon(Icons.close, size: 12, color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                }),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
               children: [
-                ...List.generate(_images.length, (index) => _buildLocalImageThumbnail(index)),
                 _buildAddImageBtn(),
+                const SizedBox(width: 12),
+
+                if (recSeq.isNotEmpty)
+                  ...List.generate(_serverFiles.length, (index) {
+                    final f = _serverFiles[index];
+                    final fileSeq = (f['FILE_SEQ'] ?? '').toString();
+                    return _buildServerImageThumbnail(recSeq, fileSeq, index);
+                  }),
+
+                ...List.generate(_images.length, (index) => _buildLocalImageThumbnail(index)),
               ],
             ),
           ),
@@ -465,30 +494,75 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     );
   }
 
+  // 영수증 썸네일 (로컬)
   Widget _buildLocalImageThumbnail(int index) {
+    return _imageThumbnailItem(
+      image: FileImage(File(_images[index].path)),
+      onDelete: () => setState(() => _images.removeAt(index)),
+      onTap: () async {
+        final bytes = await File(_images[index].path).readAsBytes();
+        _openPreview(bytes);
+      },
+    );
+  }
+
+  // 영수증 썸네일 (서버)
+  Widget _buildServerImageThumbnail(String recSeq, String fileSeq, int index) {
+    return FutureBuilder<Uint8List>(
+      future: ReceiptFileService.downloadBytes(
+        projectCd: widget.projectCd,
+        dtlRecSeq: recSeq,
+        fileSeq: fileSeq,
+      ),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return Container(
+            margin: const EdgeInsets.only(right: 12),
+            width: 85,
+            decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(10)),
+            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          );
+        }
+        return _imageThumbnailItem(
+          image: MemoryImage(snap.data!),
+          onDelete: () => _markDeleteServerFile(index),
+          onTap: () => _openPreview(snap.data!),
+          isServer: true,
+        );
+      },
+    );
+  }
+
+  // 썸네일 위젯
+  Widget _imageThumbnailItem({
+    required ImageProvider image,
+    required VoidCallback onDelete,
+    required VoidCallback onTap,
+    bool isServer = false,
+  }) {
     return Stack(
       children: [
-        Container(
-          margin: const EdgeInsets.only(right: 12),
-          width: 80,
-          height: 100,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            image: DecorationImage(
-              image: FileImage(File(_images[index].path)),
-              fit: BoxFit.cover,
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            margin: const EdgeInsets.only(right: 12),
+            width: 85,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade200),
+              image: DecorationImage(image: image, fit: BoxFit.cover),
             ),
           ),
         ),
         Positioned(
-          top: 0,
-          right: 8,
+          top: 4,
+          right: 16,
           child: GestureDetector(
-            onTap: () => setState(() => _images.removeAt(index)),
-            child: const CircleAvatar(
+            onTap: onDelete,
+            child: CircleAvatar(
               radius: 10,
-              backgroundColor: Colors.black54,
-              child: Icon(Icons.close, size: 12, color: Colors.white),
+              backgroundColor: isServer ? Colors.red.withOpacity(0.8) : Colors.black54,
+              child: const Icon(Icons.close, size: 12, color: Colors.white),
             ),
           ),
         ),
@@ -496,6 +570,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     );
   }
 
+  // 이미지 추가 버튼
   Widget _buildAddImageBtn() {
     return GestureDetector(
       onTap: _pickImages,
@@ -512,24 +587,34 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     );
   }
 
+  // 저장 버튼
   Widget _buildSaveButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: ElevatedButton(
-        onPressed: _save,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.black,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: Color(0xFFF1F4F8))),
         ),
-        child: Text(
-          _isSaving ? "저장 중..." : "저장",
-          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+        child: SizedBox(
+          width: double.infinity,
+          height: 56,
+          child: ElevatedButton(
+            onPressed: _isSaving ? null : _save,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2F6BFF),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              elevation: 0,
+            ),
+            child: Text(
+              _isSaving ? "저장 중..." : "저장하기",
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
         ),
       ),
     );
   }
-
   Future<void> _pickDate() async {
     DateTime? picked = await showDatePicker(
       context: context,

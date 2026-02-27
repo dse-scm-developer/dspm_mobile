@@ -147,7 +147,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         title: const Text(
-          "경비 관리",
+          "경비 신청",
           style: TextStyle(
             fontWeight: FontWeight.w800,
             color: Color(0xFF1E2A3B),
