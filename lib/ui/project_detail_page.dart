@@ -44,6 +44,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
   bool _loadingCodes = true;
+  bool _isWorkConfirmed = false;
 
   final Set<int> _selectedIdx = {};
 
@@ -101,35 +102,68 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     });
 
     try {
-      final list = await BizService.search(
-        siq: "project.receiptMng",
-        outDs: "rtnList",
-        params: {
-          "year": widget.yearMonth.substring(0, 4),
-          "userId": userId,
-          "sql": "N",
-          "gvSubTotal": "Sub Total",
-          "gvTotal": "Total",
-          "_mtd": "getList",
-          "yearMonth": widget.yearMonth,
-          "project": widget.projectCd,
-          "expenseCode": _selectedExpCd == "ALL" ? "" : _selectedExpCd,
-        },
+      final results = await BizService.searchList(
+        tranList: [
+          // 경비 내역
+          TranData(
+              siq: "project.receiptMng",
+              outDs: "rtnList",
+              params: {
+                "year": widget.yearMonth.substring(0, 4),
+                "userId": userId,
+                "sql": "N",
+                "gvSubTotal": "Sub Total",
+                "gvTotal": "Total",
+                "_mtd": "getList",
+                "yearMonth": widget.yearMonth,
+                "project": widget.projectCd,
+                "expenseCode": _selectedExpCd == "ALL" ? "" : _selectedExpCd,
+              }
+          ),
+          // 근무일지 확정 여부
+          TranData(
+            siq: "master.workCalConfirm",
+            outDs: "rtnList2",
+            params: {
+              "yearMonth": widget.yearMonth.replaceAll('-', ''),
+              "empId": _empId,
+            },
+          ),
+        ],
       );
 
-      final filtered = list.where((m) {
-        final p = (m["PROJECT_CD"] ?? "").toString();
-        return !p.toLowerCase().contains("total");
-      }).toList();
+      final list = (results["rtnList"] ?? []).cast<Map<String, dynamic>>();
+      final confirmRows = (results["rtnList2"] ?? []).cast<Map<String, dynamic>>();
 
       if (!mounted) return;
-      setState(() => _items = filtered);
+      setState(() {
+        _items = list.where((m) {
+          final p = (m["PROJECT_CD"] ?? "").toString().toLowerCase();
+          final u = (m["USER_ID"] ?? "").toString().trim();
+          return !p.contains("total") && (u == _empId || u.isEmpty);
+        }).toList();
+
+        // 근무일자 확정 여부
+        if (confirmRows.isNotEmpty) {
+          _isWorkConfirmed = (int.tryParse(confirmRows[0]["CNT"].toString()) ?? 0) > 0;
+        }
+      });
+
     } catch (e) {
-      debugPrint("조회 에러 발생: $e");
+      debugPrint("목록 조회 에러 발생: $e");
       if (mounted) setState(() => _items = []);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  int _calcTotal() {
+    int receiptSum = 0;
+    for (final m in _items) {
+      final v = m["PRICE"];
+      receiptSum += int.tryParse((v ?? "0").toString()) ?? 0;
+    }
+    return receiptSum;
   }
 
   // 삭제
@@ -201,15 +235,6 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
       debugPrint("저장 에러: $e");
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("저장 실패: $e")));
     }
-  }
-
-  int _calcTotal() {
-    int sum = 0;
-    for (final m in _items) {
-      final v = m["PRICE"];
-      sum += int.tryParse((v ?? "0").toString()) ?? 0;
-    }
-    return sum;
   }
 
   void _toggleAll(bool? checked) {
@@ -476,7 +501,9 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               child: SizedBox(
                 height: 54,
                 child: ElevatedButton(
-                  onPressed: _loading ? null : _deleteSelected,
+                  onPressed: (_loading || !_isWorkConfirmed)
+                      ? null
+                      : _deleteSelected,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF7D6B),
                     foregroundColor: Colors.white,
@@ -493,6 +520,10 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                 height: 54,
                 child: ElevatedButton(
                   onPressed: () async {
+                    if (!_isWorkConfirmed) {
+                      _showMsg("해당 월의 근무일지가 확정되지 않았습니다.\n근무일지 먼저 작성 후 확정해주세요.");
+                      return;
+                    }
                     final result = await Navigator.push(
                       context,
                       MaterialPageRoute(

@@ -57,6 +57,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   String _selectedCreditCd = "개인";
   final List<String> _creditOptions = ["개인", "법인"];
   String _empId = "";
+  int _calculateDayPay = 0; // 일비
 
   bool _isSaving = false;
   bool _loadingCodes = true;
@@ -100,16 +101,29 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
             outDs: "expenseCodeList",
             params: {"grpCd": "EXPENSE_ITEM_CODE"},
           ),
+          TranData(
+            siq: "project.calDayPay", //일비
+            outDs: "dayPayData",
+            params: {
+              "empId": empId,
+              "yearMonth": widget.yearMonth.replaceAll('-', ''),
+              "loadFlag": "Y",
+            },
+          ),
         ],
       );
-      final rows = (result["expenseCodeList"] ?? []).cast<Map<String, dynamic>>();
-      final codes = rows.map<CodeModel>(CodeModel.fromJson).toList();
+      final codeRows = (result["expenseCodeList"] ?? []).cast<Map<String, dynamic>>();
+      final dayPayRows = (result["dayPayData"] ?? []);
+      final codes = codeRows.map<CodeModel>(CodeModel.fromJson).toList();
 
       if (!mounted) return;
       setState(() {
         _expenseCodes = codes;
         if (_selectedExpCd.isEmpty && codes.isNotEmpty) {
           _selectedExpCd = codes[0].codeCd;
+        }
+        if (dayPayRows.isNotEmpty) {
+          _calculateDayPay = int.tryParse(dayPayRows[0]["DAY_PAY"].toString()) ?? 0;
         }
         _loadingCodes = false;
       });
@@ -210,8 +224,11 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _isSaving) return;
     setState(() => _isSaving = true);
+
     try {
-      final row = {
+      final bool isNew = widget.receiptData == null;
+
+      final Map<String, dynamic> row = {
         ...(widget.receiptData ?? {}),
         "PROJECT_CD": widget.projectCd,
         "YEARMONTH": widget.yearMonth.replaceAll('-', ''),
@@ -219,9 +236,9 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
         "EXP_CD": _selectedExpCd,
         "CONTENTS": _contentsCtrl.text,
         "PRICE": int.tryParse(_priceCtrl.text.replaceAll(',', '')) ?? 0,
-        "CREDIT_CD": _selectedCreditCd,
+        "CREDIT_CD": _selectedCreditCd == "법인" ? "CORPORATION" : "INDIVIDUAL",
         "USER_ID": _empId,
-        "state": widget.receiptData == null ? "inserted" : "updated",
+        "state": isNew ? "inserted" : "updated",
       };
 
       await BizService.save(
@@ -230,34 +247,81 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
         rows: [row],
         extraParams: {"_mtd": "saveAll"},
       );
-      final recSeq = widget.receiptData?['REC_SEQ']?.toString() ?? "";
-      // 서버 파일 삭제 반영
-      if (recSeq.isNotEmpty && _deletedFileSeqs.isNotEmpty) {
-        for (final fileSeq in _deletedFileSeqs) {
-          await ReceiptFileService.delete(
-            projectCd: widget.projectCd,
-            dtlRecSeq: recSeq,
-            fileSeq: fileSeq,
+
+      String finalRecSeq = widget.receiptData?['REC_SEQ']?.toString() ?? "";
+
+      // 파일 신규 저장 시
+      if (isNew) {
+        final res = await BizService.searchList(
+          tranList: [
+            TranData(
+              siq: "project.receiptMng",
+              outDs: "rtnList",
+              params: {
+                "year": widget.yearMonth.substring(0, 4),
+                "userId": _empId,
+                "yearMonth": widget.yearMonth,
+                "project": widget.projectCd,
+                "expenseCode": "",
+                "_mtd": "getList",
+              },
+            ),
+          ],
+        );
+
+        final List<Map<String, dynamic>> list = (res["rtnList"] ?? []).cast<Map<String, dynamic>>();
+        if (list.isNotEmpty) {
+          final realItems = list.where((e) =>
+          e["REC_SEQ"] != null &&
+              e["PROJECT_CD"] != "Total" &&
+              e["PROJECT_CD"] != "Sub Total"
+          ).toList();
+
+          if (realItems.isNotEmpty) {
+            // 내림차순 정렬해서 가장 큰 번호
+            realItems.sort((a, b) {
+              int seqA = int.tryParse(a["REC_SEQ"].toString()) ?? 0;
+              int seqB = int.tryParse(b["REC_SEQ"].toString()) ?? 0;
+              return seqB.compareTo(seqA);
+            });
+            finalRecSeq = realItems.first["REC_SEQ"].toString();
+          }
+        }
+      }
+
+      // 파일이 있을 시
+      if (finalRecSeq.isNotEmpty && finalRecSeq != "null") {
+        // 수정 시 삭제 처리
+        if (!isNew && _deletedFileSeqs.isNotEmpty) {
+          for (final fileSeq in _deletedFileSeqs) {
+            await ReceiptFileService.delete(
+              projectCd: widget.projectCd,
+              dtlRecSeq: finalRecSeq,
+              fileSeq: fileSeq,
+            );
+          }
+          _deletedFileSeqs.clear();
+        }
+
+        // 신규 사진 업로드
+        if (_images.isNotEmpty) {
+          await ReceiptFileService.upload(
+            images: _images,
+            params: {
+              "PROJECT_CD": widget.projectCd,
+              "DTL_REC_SEQ": finalRecSeq,
+              "USER_ID": _empId,
+              "YEARMONTH": widget.yearMonth.replaceAll('-', ''),
+              "EXP_CD": _selectedExpCd,
+            },
           );
         }
-        _deletedFileSeqs.clear();
-      }
-      // 새로 선택한 이미지 업로드
-      if (_images.isNotEmpty) {
-        await ReceiptFileService.upload(
-          images: _images,
-          params: {
-            "PROJECT_CD": widget.projectCd,
-            "DTL_REC_SEQ": recSeq,
-            "USER_ID": _empId,
-            "YEARMONTH": widget.yearMonth.replaceAll('-', ''),
-            "EXP_CD": _selectedExpCd,
-          },
-        );
       }
       if (mounted) Navigator.pop(context, true);
+
     } catch (e) {
-      debugPrint("저장 실패: $e");
+      debugPrint("저장 실패 에러: $e");
+      _showMsg("저장 실패");
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -281,15 +345,16 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
       );
 
       if (mounted) _showMsg("갤러리에 저장이 완료되었습니다.");
-      
+
     } catch (e) {
       debugPrint("다운로드 실패 에러: $e");
       if (mounted) _showMsg("저장 실패");
     }
   }
 
+  // snackbar함수
   void _showMsg(String msg) {
-    ScaffoldMessenger.of(context).removeCurrentSnackBar(); // 기존 snackbar 삭제
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -405,7 +470,17 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     return DropdownButtonFormField<String>(
       value: _selectedExpCd.isEmpty ? null : _selectedExpCd,
       items: _expenseCodes.map((c) => DropdownMenuItem(value: c.codeCd, child: Text(c.codeNm))).toList(),
-      onChanged: (v) => setState(() => _selectedExpCd = v ?? ""),
+      onChanged: (v) {
+        if (v == null) return;
+        setState(() {
+          _selectedExpCd = v;
+          // 일비 선택시, 자동 계산
+          if (v == "251") {
+            _priceCtrl.text = _calculateDayPay.toString();
+            _contentsCtrl.text = "일비 자동 계산분";
+          }
+        });
+      },
       decoration: InputDecoration(
         filled: true,
         fillColor: const Color(0xFFF6F8FB),
@@ -428,8 +503,10 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   }
 
   Widget _buildPriceField() {
+    bool isDayPay = (_selectedExpCd == "251");
     return TextFormField(
       controller: _priceCtrl,
+      readOnly: isDayPay, // 일비는 수정 불가
       keyboardType: TextInputType.number,
       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2F6BFF)),
       decoration: InputDecoration(
@@ -615,15 +692,48 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
       ),
     );
   }
+
+  // 달력은 해당 달만 나오게
   Future<void> _pickDate() async {
-    DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2024),
-      lastDate: DateTime(2030),
-    );
-    if (picked != null) {
-      setState(() => _dateCtrl.text = DateFormat('yyyy-MM-dd').format(picked));
+    try {
+      String ymRaw = widget.yearMonth.replaceAll('-', '');
+      if (ymRaw.length < 6) {
+        throw Exception("연월 형식이 잘못되었습니다: ${widget.yearMonth}");
+      }
+      final int year = int.parse(ymRaw.substring(0, 4));
+      final int month = int.parse(ymRaw.substring(4, 6));
+
+      final DateTime firstDay = DateTime(year, month, 1);
+      final DateTime lastDay = DateTime(year, month + 1, 0);
+
+      DateTime initialDate = DateTime.tryParse(_dateCtrl.text) ?? firstDay;
+      if (initialDate.isBefore(firstDay) || initialDate.isAfter(lastDay)) {
+        initialDate = firstDay;
+      }
+
+      // 달력 띄우기
+      DateTime? picked = await showDatePicker(
+        context: context,
+        initialDate: initialDate,
+        firstDate: firstDay,
+        lastDate: lastDay,
+        helpText: "${year}년 ${month}월 날짜 선택",
+      );
+
+      if (picked != null) {
+        setState(() => _dateCtrl.text = DateFormat('yyyy-MM-dd').format(picked));
+      }
+    } catch (e) {
+      debugPrint("날짜 선택 에러: $e");
+      DateTime? picked = await showDatePicker(
+        context: context,
+        initialDate: DateTime.now(),
+        firstDate: DateTime(2024),
+        lastDate: DateTime(2030),
+      );
+      if (picked != null) {
+        setState(() => _dateCtrl.text = DateFormat('yyyy-MM-dd').format(picked));
+      }
     }
   }
 }
