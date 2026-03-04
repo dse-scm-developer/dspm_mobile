@@ -11,6 +11,7 @@ import '/features/file/service/receipt_file_service.dart';
 import '../../core/storage/app_session.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:saver_gallery/saver_gallery.dart';
+import '../../core/theme/app_theme.dart'; 
 
 class CodeModel {
   final String codeCd;
@@ -147,6 +148,18 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     final List<XFile> selected = await _picker.pickMultiImage();
     if (selected.isNotEmpty) {
       setState(() => _images.addAll(selected));
+    }
+  }
+
+  Future<void> _pickDate() async {
+    DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2030),
+    );
+    if (picked != null) {
+      setState(() => _dateCtrl.text = DateFormat('yyyy-MM-dd').format(picked));
     }
   }
 
@@ -315,88 +328,79 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      // scaffoldBackgroundColor는 AppTheme에서 이미 흰색이라 생략 가능
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          "경비 상세",
-          style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF1E2A3B)),
-        ),
-        iconTheme: const IconThemeData(color: Color(0xFF1E2A3B)),
+        title: const Text("경비 상세"),
       ),
       resizeToAvoidBottomInset: true,
       body: _loadingCodes
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildImageSection(),
-              const SizedBox(height: 32),
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildImageSection(),
+                    const SizedBox(height: 32),
 
-              _buildLabel("경비일자"),
-              const SizedBox(height: 8),
-              _buildDateField(),
+                    _buildLabel(context, "경비일자"),
+                    const SizedBox(height: 8),
+                    _buildDateField(context),
 
-              const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-              _buildLabel("경비 항목"),
-              const SizedBox(height: 8),
-              _buildExpTypeDropdown(),
+                    _buildLabel(context, "경비 항목"),
+                    const SizedBox(height: 8),
+                    _buildExpTypeDropdown(),
 
-              const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-              _buildLabel("개인/법인"),
-              const SizedBox(height: 8),
-              _buildCreditTypeDropdown(),
+                    _buildLabel(context, "개인/법인"),
+                    const SizedBox(height: 8),
+                    _buildCreditTypeDropdown(),
 
-              const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-              _buildLabel("금액"),
-              const SizedBox(height: 8),
-              _buildPriceField(),
+                    _buildLabel(context, "금액"),
+                    const SizedBox(height: 8),
+                    _buildPriceField(context),
 
-              const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-              _buildLabel("내용"),
-              const SizedBox(height: 8),
-              _buildContentsField(),
+                    _buildLabel(context, "내용"),
+                    const SizedBox(height: 8),
+                    _buildContentsField(),
 
-              const SizedBox(height: 40),
-            ],
-          ),
-        ),
-      ),
-      bottomNavigationBar: _buildSaveButton(),
+                    const SizedBox(height: 40),
+                  ],
+                ),
+              ),
+            ),
+      bottomNavigationBar: _buildSaveButton(context),
     );
   }
 
-  Widget _buildLabel(String text) {
+  Widget _buildLabel(BuildContext context, String text) {
     return Text(
       text,
-      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1E2A3B)),
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
     );
   }
 
-  Widget _buildDateField() {
-    return InkWell(
+  /// ✅ DateField: Container 대신 TextFormField(readOnly)로 만들어서
+  /// AppTheme.inputDecorationTheme를 그대로 탄다.
+  Widget _buildDateField(BuildContext context) {
+    return TextFormField(
+      controller: _dateCtrl,
+      readOnly: true,
       onTap: _pickDate,
-      child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        alignment: Alignment.centerLeft,
-        decoration: BoxDecoration(color: const Color(0xFFF6F8FB), borderRadius: BorderRadius.circular(14)),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(_dateCtrl.text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            const Icon(Icons.calendar_today, size: 20, color: Colors.grey),
-          ],
-        ),
+      decoration: const InputDecoration(
+        suffixIcon: Icon(Icons.calendar_today, size: 20),
       ),
     );
   }
@@ -404,39 +408,47 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   Widget _buildExpTypeDropdown() {
     return DropdownButtonFormField<String>(
       value: _selectedExpCd.isEmpty ? null : _selectedExpCd,
-      items: _expenseCodes.map((c) => DropdownMenuItem(value: c.codeCd, child: Text(c.codeNm))).toList(),
+      items: _expenseCodes
+          .map((c) => DropdownMenuItem(
+                value: c.codeCd,
+                child: Text(
+                  c.codeNm,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ))
+          .toList(),
       onChanged: (v) => setState(() => _selectedExpCd = v ?? ""),
-      decoration: InputDecoration(
-        filled: true,
-        fillColor: const Color(0xFFF6F8FB),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-      ),
+      // ✅ decoration 비워서 InputDecorationTheme 적용
+      decoration: const InputDecoration(),
     );
   }
 
   Widget _buildCreditTypeDropdown() {
     return DropdownButtonFormField<String>(
       value: _selectedCreditCd,
-      items: _creditOptions.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+      items: _creditOptions
+          .map((val) => DropdownMenuItem(
+                value: val,
+                child: Text(val, style: const TextStyle(fontWeight: FontWeight.w800)),
+              ))
+          .toList(),
       onChanged: (v) => setState(() => _selectedCreditCd = v ?? "개인"),
-      decoration: InputDecoration(
-        filled: true,
-        fillColor: const Color(0xFFF6F8FB),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-      ),
+      decoration: const InputDecoration(),
     );
   }
 
-  Widget _buildPriceField() {
+  Widget _buildPriceField(BuildContext context) {
     return TextFormField(
       controller: _priceCtrl,
       keyboardType: TextInputType.number,
-      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2F6BFF)),
-      decoration: InputDecoration(
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            color: AppTheme.primary,
+          ),
+      decoration: const InputDecoration(
         suffixText: "원",
-        filled: true,
-        fillColor: const Color(0xFFF6F8FB),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
       ),
     );
   }
@@ -445,51 +457,58 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     return TextFormField(
       controller: _contentsCtrl,
       maxLines: 3,
-      decoration: InputDecoration(
+      decoration: const InputDecoration(
         hintText: "내용을 입력하세요",
-        filled: true,
-        fillColor: const Color(0xFFF6F8FB),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
       ),
     );
   }
 
-// 영수증 영역
+  // ===================
+  // 영수증 영역
+  // ===================
   Widget _buildImageSection() {
     final recSeq = widget.receiptData?['REC_SEQ']?.toString() ?? "";
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("영수증 첨부", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 16),
-          if (_loadingFiles) const Padding(
-            padding: EdgeInsets.only(bottom: 8.0),
-            child: LinearProgressIndicator(),
-          ),
-          SizedBox(
-            height: 110,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _buildAddImageBtn(),
-                const SizedBox(width: 12),
 
-                if (recSeq.isNotEmpty)
-                  ...List.generate(_serverFiles.length, (index) {
-                    final f = _serverFiles[index];
-                    final fileSeq = (f['FILE_SEQ'] ?? '').toString();
-                    return _buildServerImageThumbnail(recSeq, fileSeq, index);
-                  }),
-
-                ...List.generate(_images.length, (index) => _buildLocalImageThumbnail(index)),
-              ],
+    // ✅ CardTheme(흰 배경 + border) 그대로 사용
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              "영수증 첨부",
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: AppTheme.ink),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+
+            if (_loadingFiles) const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: LinearProgressIndicator(),
+            ),
+
+            SizedBox(
+              height: 110,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  _buildAddImageBtn(),
+                  const SizedBox(width: 12),
+
+                  if (recSeq.isNotEmpty)
+                    ...List.generate(_serverFiles.length, (index) {
+                      final f = _serverFiles[index];
+                      final fileSeq = (f['FILE_SEQ'] ?? '').toString();
+                      return _buildServerImageThumbnail(recSeq, fileSeq, index);
+                    }),
+
+                  ...List.generate(_images.length, (index) => _buildLocalImageThumbnail(index)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -519,7 +538,11 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
           return Container(
             margin: const EdgeInsets.only(right: 12),
             width: 85,
-            decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+              color: AppTheme.softBg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.border),
+            ),
             child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
           );
         }
@@ -549,7 +572,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
             width: 85,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey.shade200),
+              border: Border.all(color: AppTheme.border),
               image: DecorationImage(image: image, fit: BoxFit.cover),
             ),
           ),
@@ -561,7 +584,10 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
             onTap: onDelete,
             child: CircleAvatar(
               radius: 10,
-              backgroundColor: isServer ? Colors.red.withOpacity(0.8) : Colors.black54,
+              // ✅ 서버/로컬 모두 톤 통일(너무 쨍한 red 대신 ink 기반)
+              backgroundColor: isServer
+                  ? AppTheme.primary.withOpacity(0.85)
+                  : AppTheme.ink.withOpacity(0.6),
               child: const Icon(Icons.close, size: 12, color: Colors.white),
             ),
           ),
@@ -578,52 +604,37 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
         width: 80,
         height: 100,
         decoration: BoxDecoration(
-          color: Colors.grey[100],
+          color: AppTheme.softBg,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.grey[300]!),
+          border: Border.all(color: AppTheme.border),
         ),
-        child: const Icon(Icons.add_a_photo, color: Colors.grey),
+        child: Icon(Icons.add_a_photo, color: AppTheme.ink.withOpacity(0.5)),
       ),
     );
   }
 
   // 저장 버튼
-  Widget _buildSaveButton() {
+  Widget _buildSaveButton(BuildContext context) {
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFF1F4F8))),
+          border: Border(top: BorderSide(color: AppTheme.border)),
         ),
         child: SizedBox(
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
             onPressed: _isSaving ? null : _save,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2F6BFF),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              elevation: 0,
-            ),
+            // ✅ style 제거 → AppTheme.elevatedButtonTheme 적용
             child: Text(
               _isSaving ? "저장 중..." : "저장하기",
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
             ),
           ),
         ),
       ),
     );
-  }
-  Future<void> _pickDate() async {
-    DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2024),
-      lastDate: DateTime(2030),
-    );
-    if (picked != null) {
-      setState(() => _dateCtrl.text = DateFormat('yyyy-MM-dd').format(picked));
-    }
   }
 }

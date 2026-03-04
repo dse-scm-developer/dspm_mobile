@@ -1,12 +1,11 @@
 // receipt_page.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:month_year_picker/month_year_picker.dart';
-
 import '/features/biz/service/biz_service.dart';
 import '/features/biz/service/tran_data.dart';
 import '../../core/storage/app_session.dart';
 import 'project_detail_page.dart';
+import '../../core/theme/app_theme.dart'; 
 
 class ReceiptPage extends StatefulWidget {
   const ReceiptPage({super.key});
@@ -31,18 +30,12 @@ class _ReceiptPageState extends State<ReceiptPage> {
   Future<void> _pickMonth() async {
     FocusScope.of(context).unfocus();
 
-    final picked = await showMonthYearPicker(
-      context: context,
+    final picked = await AppTheme.pickMonthYear(
+      context,
       initialDate: _month,
       firstDate: DateTime(2020),
       lastDate: DateTime(2035),
-      builder: (context, child) {
-        final mq = MediaQuery.of(context);
-        return MediaQuery(
-          data: mq.copyWith(textScaler: const TextScaler.linear(0.94)),
-          child: child!,
-        );
-      },
+      // textScale: 0.94, // 기본값이 0.94면 생략 가능
     );
 
     if (picked == null) return;

@@ -5,7 +5,7 @@ import 'package:month_year_picker/month_year_picker.dart';
 import '/features/biz/service/biz_service.dart';
 import '/features/biz/service/tran_data.dart';
 import '../../core/storage/app_session.dart';
-import '../../core/theme/app_theme.dart'; // ✅ 추가
+import '../../core/theme/app_theme.dart'; 
 
 class _CellStyle {
   final bool editable;
@@ -169,48 +169,11 @@ class _WorkLogPageState extends State<WorkLogPage> {
   Future<void> _pickMonth() async {
     FocusScope.of(context).unfocus();
 
-    final picked = await showMonthYearPicker(
-      context: context,
+    final picked = await AppTheme.pickMonthYear(
+      context,
       initialDate: _month,
       firstDate: DateTime(2020),
       lastDate: DateTime(2035),
-      builder: (context, child) {
-        final base = Theme.of(context);
-        final mq = MediaQuery.of(context);
-
-        return Theme(
-          data: base.copyWith(
-            colorScheme: base.colorScheme.copyWith(
-              // ✅ 헤더 배경(연한색)
-              primary: AppTheme.primary.withOpacity(0.12),
-              // ✅ 헤더 텍스트
-              onPrimary: AppTheme.ink,
-
-              // ✅ 선택된 월 원형/강조색(진한 primary)
-              secondary: AppTheme.primary,
-              onSecondary: Colors.white,
-
-              surface: Colors.white,
-              onSurface: AppTheme.ink,
-            ),
-            dialogTheme: base.dialogTheme.copyWith(
-              backgroundColor: Colors.white,
-              surfaceTintColor: Colors.transparent,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: AppTheme.primary,
-                textStyle: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-          ),
-          child: MediaQuery(
-            data: mq.copyWith(textScaler: const TextScaler.linear(0.94)),
-            child: child!,
-          ),
-        );
-      },
     );
 
     if (picked == null) return;
@@ -218,6 +181,7 @@ class _WorkLogPageState extends State<WorkLogPage> {
     setState(() => _month = DateTime(picked.year, picked.month, 1));
     await _loadMonthRows(_month);
   }
+
   List<DropdownMenuItem<String>> buildCodeItems(List<Map<String, dynamic>> rows) {
     final seen = <String>{};
     return rows.where((r) {
