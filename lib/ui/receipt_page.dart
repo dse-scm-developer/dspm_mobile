@@ -15,7 +15,8 @@ class ReceiptPage extends StatefulWidget {
 }
 
 class _ReceiptPageState extends State<ReceiptPage> {
-  DateTime _month = DateTime(DateTime.now().year, DateTime.now().month, 1);
+  DateTime _month = DateTime(DateTime.now().year, DateTime.now().month - 1);
+
   bool _loading = true;
   List<Map<String, dynamic>> _projectList = []; // 프로젝트 리스트
   int _totalPrice = 0;
