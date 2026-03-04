@@ -11,7 +11,6 @@ import '/features/file/service/receipt_file_service.dart';
 import '../../core/storage/app_session.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:saver_gallery/saver_gallery.dart';
-import '../../core/theme/app_theme.dart'; 
 
 class CodeModel {
   final String codeCd;
@@ -58,9 +57,11 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   String _selectedCreditCd = "개인";
   final List<String> _creditOptions = ["개인", "법인"];
   String _empId = "";
+  int _calculateDayPay = 0; // 일비
 
   bool _isSaving = false;
   bool _loadingCodes = true;
+  bool get _isConfirmed => (widget.receiptData?['CONFIRM_YN'] ??'N') == 'Y';
 
   // 서버에 이미 저장된 파일 목록
   List<Map<String, dynamic>> _serverFiles = [];
@@ -101,16 +102,29 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
             outDs: "expenseCodeList",
             params: {"grpCd": "EXPENSE_ITEM_CODE"},
           ),
+          TranData(
+            siq: "project.calDayPay", //일비
+            outDs: "dayPayData",
+            params: {
+              "empId": empId,
+              "yearMonth": widget.yearMonth.replaceAll('-', ''),
+              "loadFlag": "Y",
+            },
+          ),
         ],
       );
-      final rows = (result["expenseCodeList"] ?? []).cast<Map<String, dynamic>>();
-      final codes = rows.map<CodeModel>(CodeModel.fromJson).toList();
+      final codeRows = (result["expenseCodeList"] ?? []).cast<Map<String, dynamic>>();
+      final dayPayRows = (result["dayPayData"] ?? []);
+      final codes = codeRows.map<CodeModel>(CodeModel.fromJson).toList();
 
       if (!mounted) return;
       setState(() {
         _expenseCodes = codes;
         if (_selectedExpCd.isEmpty && codes.isNotEmpty) {
           _selectedExpCd = codes[0].codeCd;
+        }
+        if (dayPayRows.isNotEmpty) {
+          _calculateDayPay = int.tryParse(dayPayRows[0]["DAY_PAY"].toString()) ?? 0;
         }
         _loadingCodes = false;
       });
@@ -148,18 +162,6 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     final List<XFile> selected = await _picker.pickMultiImage();
     if (selected.isNotEmpty) {
       setState(() => _images.addAll(selected));
-    }
-  }
-
-  Future<void> _pickDate() async {
-    DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2024),
-      lastDate: DateTime(2030),
-    );
-    if (picked != null) {
-      setState(() => _dateCtrl.text = DateFormat('yyyy-MM-dd').format(picked));
     }
   }
 
@@ -222,9 +224,19 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   // 경비 내역 저장 함수
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _isSaving) return;
+    final String inputDate = _dateCtrl.text.replaceAll('-', '');
+    final String inputYm = inputDate.substring(0, 6); 
+    final String targetYm = widget.yearMonth.replaceAll('-', '');
+    if (inputYm != targetYm) {
+      _showMsg("일자는 조회한 연월(${widget.yearMonth})과 같아야 합니다.");
+      return;
+    }
     setState(() => _isSaving = true);
+
     try {
-      final row = {
+      final bool isNew = widget.receiptData == null;
+
+      final Map<String, dynamic> row = {
         ...(widget.receiptData ?? {}),
         "PROJECT_CD": widget.projectCd,
         "YEARMONTH": widget.yearMonth.replaceAll('-', ''),
@@ -232,9 +244,9 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
         "EXP_CD": _selectedExpCd,
         "CONTENTS": _contentsCtrl.text,
         "PRICE": int.tryParse(_priceCtrl.text.replaceAll(',', '')) ?? 0,
-        "CREDIT_CD": _selectedCreditCd,
+        "CREDIT_CD": _selectedCreditCd == "법인" ? "CORPORATION" : "INDIVIDUAL",
         "USER_ID": _empId,
-        "state": widget.receiptData == null ? "inserted" : "updated",
+        "state": isNew ? "inserted" : "updated",
       };
 
       await BizService.save(
@@ -243,34 +255,81 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
         rows: [row],
         extraParams: {"_mtd": "saveAll"},
       );
-      final recSeq = widget.receiptData?['REC_SEQ']?.toString() ?? "";
-      // 서버 파일 삭제 반영
-      if (recSeq.isNotEmpty && _deletedFileSeqs.isNotEmpty) {
-        for (final fileSeq in _deletedFileSeqs) {
-          await ReceiptFileService.delete(
-            projectCd: widget.projectCd,
-            dtlRecSeq: recSeq,
-            fileSeq: fileSeq,
+
+      String finalRecSeq = widget.receiptData?['REC_SEQ']?.toString() ?? "";
+
+      // 파일 신규 저장 시
+      if (isNew) {
+        final res = await BizService.searchList(
+          tranList: [
+            TranData(
+              siq: "project.receiptMng",
+              outDs: "rtnList",
+              params: {
+                "year": widget.yearMonth.substring(0, 4),
+                "userId": _empId,
+                "yearMonth": widget.yearMonth,
+                "project": widget.projectCd,
+                "expenseCode": "",
+                "_mtd": "getList",
+              },
+            ),
+          ],
+        );
+
+        final List<Map<String, dynamic>> list = (res["rtnList"] ?? []).cast<Map<String, dynamic>>();
+        if (list.isNotEmpty) {
+          final realItems = list.where((e) =>
+          e["REC_SEQ"] != null &&
+              e["PROJECT_CD"] != "Total" &&
+              e["PROJECT_CD"] != "Sub Total"
+          ).toList();
+
+          if (realItems.isNotEmpty) {
+            // 내림차순 정렬해서 가장 큰 번호
+            realItems.sort((a, b) {
+              int seqA = int.tryParse(a["REC_SEQ"].toString()) ?? 0;
+              int seqB = int.tryParse(b["REC_SEQ"].toString()) ?? 0;
+              return seqB.compareTo(seqA);
+            });
+            finalRecSeq = realItems.first["REC_SEQ"].toString();
+          }
+        }
+      }
+
+      // 파일이 있을 시
+      if (finalRecSeq.isNotEmpty && finalRecSeq != "null") {
+        // 수정 시 삭제 처리
+        if (!isNew && _deletedFileSeqs.isNotEmpty) {
+          for (final fileSeq in _deletedFileSeqs) {
+            await ReceiptFileService.delete(
+              projectCd: widget.projectCd,
+              dtlRecSeq: finalRecSeq,
+              fileSeq: fileSeq,
+            );
+          }
+          _deletedFileSeqs.clear();
+        }
+
+        // 신규 사진 업로드
+        if (_images.isNotEmpty) {
+          await ReceiptFileService.upload(
+            images: _images,
+            params: {
+              "PROJECT_CD": widget.projectCd,
+              "DTL_REC_SEQ": finalRecSeq,
+              "USER_ID": _empId,
+              "YEARMONTH": widget.yearMonth.replaceAll('-', ''),
+              "EXP_CD": _selectedExpCd,
+            },
           );
         }
-        _deletedFileSeqs.clear();
-      }
-      // 새로 선택한 이미지 업로드
-      if (_images.isNotEmpty) {
-        await ReceiptFileService.upload(
-          images: _images,
-          params: {
-            "PROJECT_CD": widget.projectCd,
-            "DTL_REC_SEQ": recSeq,
-            "USER_ID": _empId,
-            "YEARMONTH": widget.yearMonth.replaceAll('-', ''),
-            "EXP_CD": _selectedExpCd,
-          },
-        );
       }
       if (mounted) Navigator.pop(context, true);
+
     } catch (e) {
-      debugPrint("저장 실패: $e");
+      debugPrint("저장 실패 에러: $e");
+      _showMsg("저장 실패");
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -294,15 +353,16 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
       );
 
       if (mounted) _showMsg("갤러리에 저장이 완료되었습니다.");
-      
+
     } catch (e) {
       debugPrint("다운로드 실패 에러: $e");
       if (mounted) _showMsg("저장 실패");
     }
   }
 
+  // snackbar함수
   void _showMsg(String msg) {
-    ScaffoldMessenger.of(context).removeCurrentSnackBar(); // 기존 snackbar 삭제
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -328,79 +388,90 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // scaffoldBackgroundColor는 AppTheme에서 이미 흰색이라 생략 가능
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("경비 상세"),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: const Text(
+          "경비 상세",
+          style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF1E2A3B)),
+        ),
+        iconTheme: const IconThemeData(color: Color(0xFF1E2A3B)),
       ),
       resizeToAvoidBottomInset: true,
       body: _loadingCodes
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildImageSection(),
-                    const SizedBox(height: 32),
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildImageSection(),
+              const SizedBox(height: 32),
 
-                    _buildLabel(context, "경비일자"),
-                    const SizedBox(height: 8),
-                    _buildDateField(context),
+              _buildLabel("경비일자"),
+              const SizedBox(height: 8),
+              _buildDateField(),
 
-                    const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-                    _buildLabel(context, "경비 항목"),
-                    const SizedBox(height: 8),
-                    _buildExpTypeDropdown(),
+              _buildLabel("경비 항목"),
+              const SizedBox(height: 8),
+              _buildExpTypeDropdown(),
 
-                    const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-                    _buildLabel(context, "개인/법인"),
-                    const SizedBox(height: 8),
-                    _buildCreditTypeDropdown(),
+              _buildLabel("개인/법인"),
+              const SizedBox(height: 8),
+              _buildCreditTypeDropdown(),
 
-                    const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-                    _buildLabel(context, "금액"),
-                    const SizedBox(height: 8),
-                    _buildPriceField(context),
+              _buildLabel("금액"),
+              const SizedBox(height: 8),
+              _buildPriceField(),
 
-                    const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-                    _buildLabel(context, "내용"),
-                    const SizedBox(height: 8),
-                    _buildContentsField(),
+              _buildLabel("내용"),
+              const SizedBox(height: 8),
+              _buildContentsField(),
 
-                    const SizedBox(height: 40),
-                  ],
-                ),
-              ),
-            ),
-      bottomNavigationBar: _buildSaveButton(context),
+              const SizedBox(height: 40),
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: _isConfirmed
+        ? null
+        : _buildSaveButton(),
     );
   }
 
-  Widget _buildLabel(BuildContext context, String text) {
+  Widget _buildLabel(String text) {
     return Text(
       text,
-      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-          ),
+      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1E2A3B)),
     );
   }
 
-  /// ✅ DateField: Container 대신 TextFormField(readOnly)로 만들어서
-  /// AppTheme.inputDecorationTheme를 그대로 탄다.
-  Widget _buildDateField(BuildContext context) {
-    return TextFormField(
-      controller: _dateCtrl,
-      readOnly: true,
-      onTap: _pickDate,
-      decoration: const InputDecoration(
-        suffixIcon: Icon(Icons.calendar_today, size: 20),
+  Widget _buildDateField() {
+    return InkWell(
+      onTap: _isConfirmed ? null : _pickDate,
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(color: const Color(0xFFF6F8FB), borderRadius: BorderRadius.circular(14)),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(_dateCtrl.text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const Icon(Icons.calendar_today, size: 20, color: Colors.grey),
+          ],
+        ),
       ),
     );
   }
@@ -408,47 +479,52 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   Widget _buildExpTypeDropdown() {
     return DropdownButtonFormField<String>(
       value: _selectedExpCd.isEmpty ? null : _selectedExpCd,
-      items: _expenseCodes
-          .map((c) => DropdownMenuItem(
-                value: c.codeCd,
-                child: Text(
-                  c.codeNm,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-              ))
-          .toList(),
-      onChanged: (v) => setState(() => _selectedExpCd = v ?? ""),
-      // ✅ decoration 비워서 InputDecorationTheme 적용
-      decoration: const InputDecoration(),
+      items: _expenseCodes.map((c) => DropdownMenuItem(value: c.codeCd, child: Text(c.codeNm))).toList(),
+      onChanged: _isConfirmed ? null
+        : (v) {
+        if (v == null) return;
+        setState(() {
+          _selectedExpCd = v;
+          // 일비 선택시, 자동 계산
+          if (v == "251") {
+            _priceCtrl.text = _calculateDayPay.toString();
+            _contentsCtrl.text = "일비 자동 계산분";
+          }
+        });
+      },
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: const Color(0xFFF6F8FB),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      ),
     );
   }
 
   Widget _buildCreditTypeDropdown() {
     return DropdownButtonFormField<String>(
       value: _selectedCreditCd,
-      items: _creditOptions
-          .map((val) => DropdownMenuItem(
-                value: val,
-                child: Text(val, style: const TextStyle(fontWeight: FontWeight.w800)),
-              ))
-          .toList(),
-      onChanged: (v) => setState(() => _selectedCreditCd = v ?? "개인"),
-      decoration: const InputDecoration(),
+      items: _creditOptions.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+      onChanged: _isConfirmed ? null : (v) => setState(() => _selectedCreditCd = v ?? "개인"),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: const Color(0xFFF6F8FB),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      ),
     );
   }
 
-  Widget _buildPriceField(BuildContext context) {
+  Widget _buildPriceField() {
+    bool isDayPay = (_selectedExpCd == "251");
     return TextFormField(
       controller: _priceCtrl,
+      readOnly: isDayPay || _isConfirmed,
       keyboardType: TextInputType.number,
-      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontSize: 18,
-            fontWeight: FontWeight.w900,
-            color: AppTheme.primary,
-          ),
-      decoration: const InputDecoration(
+      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2F6BFF)),
+      decoration: InputDecoration(
         suffixText: "원",
+        filled: true,
+        fillColor: const Color(0xFFF6F8FB),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
       ),
     );
   }
@@ -456,59 +532,53 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   Widget _buildContentsField() {
     return TextFormField(
       controller: _contentsCtrl,
+      readOnly: _isConfirmed,
       maxLines: 3,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         hintText: "내용을 입력하세요",
+        filled: true,
+        fillColor: const Color(0xFFF6F8FB),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
       ),
     );
   }
 
-  // ===================
-  // 영수증 영역
-  // ===================
+// 영수증 영역
   Widget _buildImageSection() {
     final recSeq = widget.receiptData?['REC_SEQ']?.toString() ?? "";
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("영수증 첨부", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 16),
+          if (_loadingFiles) const Padding(
+            padding: EdgeInsets.only(bottom: 8.0),
+            child: LinearProgressIndicator(),
+          ),
+          SizedBox(
+            height: 110,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _buildAddImageBtn(),
+                const SizedBox(width: 12),
 
-    // ✅ CardTheme(흰 배경 + border) 그대로 사용
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              "영수증 첨부",
-              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: AppTheme.ink),
+                if (recSeq.isNotEmpty)
+                  ...List.generate(_serverFiles.length, (index) {
+                    final f = _serverFiles[index];
+                    final fileSeq = (f['FILE_SEQ'] ?? '').toString();
+                    return _buildServerImageThumbnail(recSeq, fileSeq, index);
+                  }),
+
+                ...List.generate(_images.length, (index) => _buildLocalImageThumbnail(index)),
+              ],
             ),
-            const SizedBox(height: 16),
-
-            if (_loadingFiles) const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: LinearProgressIndicator(),
-            ),
-
-            SizedBox(
-              height: 110,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  _buildAddImageBtn(),
-                  const SizedBox(width: 12),
-
-                  if (recSeq.isNotEmpty)
-                    ...List.generate(_serverFiles.length, (index) {
-                      final f = _serverFiles[index];
-                      final fileSeq = (f['FILE_SEQ'] ?? '').toString();
-                      return _buildServerImageThumbnail(recSeq, fileSeq, index);
-                    }),
-
-                  ...List.generate(_images.length, (index) => _buildLocalImageThumbnail(index)),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -538,11 +608,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
           return Container(
             margin: const EdgeInsets.only(right: 12),
             width: 85,
-            decoration: BoxDecoration(
-              color: AppTheme.softBg,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.border),
-            ),
+            decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(10)),
             child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
           );
         }
@@ -572,11 +638,12 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
             width: 85,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.border),
+              border: Border.all(color: Colors.grey.shade200),
               image: DecorationImage(image: image, fit: BoxFit.cover),
             ),
           ),
         ),
+        if(!_isConfirmed)
         Positioned(
           top: 4,
           right: 16,
@@ -584,10 +651,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
             onTap: onDelete,
             child: CircleAvatar(
               radius: 10,
-              // ✅ 서버/로컬 모두 톤 통일(너무 쨍한 red 대신 ink 기반)
-              backgroundColor: isServer
-                  ? AppTheme.primary.withOpacity(0.85)
-                  : AppTheme.ink.withOpacity(0.6),
+              backgroundColor: isServer ? Colors.red.withOpacity(0.8) : Colors.black54,
               child: const Icon(Icons.close, size: 12, color: Colors.white),
             ),
           ),
@@ -599,42 +663,90 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   // 이미지 추가 버튼
   Widget _buildAddImageBtn() {
     return GestureDetector(
-      onTap: _pickImages,
+      onTap: _isConfirmed ? null : _pickImages,
       child: Container(
         width: 80,
         height: 100,
         decoration: BoxDecoration(
-          color: AppTheme.softBg,
+          color: Colors.grey[100],
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppTheme.border),
+          border: Border.all(color: Colors.grey[300]!),
         ),
-        child: Icon(Icons.add_a_photo, color: AppTheme.ink.withOpacity(0.5)),
+        child: const Icon(Icons.add_a_photo, color: Colors.grey),
       ),
     );
   }
 
   // 저장 버튼
-  Widget _buildSaveButton(BuildContext context) {
+  Widget _buildSaveButton() {
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: AppTheme.border)),
+          border: Border(top: BorderSide(color: Color(0xFFF1F4F8))),
         ),
         child: SizedBox(
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
             onPressed: _isSaving ? null : _save,
-            // ✅ style 제거 → AppTheme.elevatedButtonTheme 적용
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2F6BFF),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              elevation: 0,
+            ),
             child: Text(
               _isSaving ? "저장 중..." : "저장하기",
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
         ),
       ),
     );
+  }
+
+  // 달력은 해당 달만 나오게
+  Future<void> _pickDate() async {
+    try {
+      String ymRaw = widget.yearMonth.replaceAll('-', '');
+      if (ymRaw.length < 6) {
+        throw Exception("연월 형식이 잘못되었습니다: ${widget.yearMonth}");
+      }
+      final int year = int.parse(ymRaw.substring(0, 4));
+      final int month = int.parse(ymRaw.substring(4, 6));
+
+      final DateTime firstDay = DateTime(year, month, 1);
+      final DateTime lastDay = DateTime(year, month + 1, 0);
+
+      DateTime initialDate = DateTime.tryParse(_dateCtrl.text) ?? firstDay;
+      if (initialDate.isBefore(firstDay) || initialDate.isAfter(lastDay)) {
+        initialDate = firstDay;
+      }
+
+      // 달력 띄우기
+      DateTime? picked = await showDatePicker(
+        context: context,
+        initialDate: initialDate,
+        firstDate: firstDay,
+        lastDate: lastDay,
+        helpText: "${year}년 ${month}월 날짜 선택",
+      );
+
+      if (picked != null) {
+        setState(() => _dateCtrl.text = DateFormat('yyyy-MM-dd').format(picked));
+      }
+    } catch (e) {
+      debugPrint("날짜 선택 에러: $e");
+      DateTime? picked = await showDatePicker(
+        context: context,
+        initialDate: DateTime.now(),
+        firstDate: DateTime(2024),
+        lastDate: DateTime(2030),
+      );
+      if (picked != null) {
+        setState(() => _dateCtrl.text = DateFormat('yyyy-MM-dd').format(picked));
+      }
+    }
   }
 }

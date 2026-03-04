@@ -4,7 +4,6 @@ import '/features/biz/service/biz_service.dart';
 import '/features/biz/service/tran_data.dart';
 import '../../core/storage/app_session.dart';
 import 'receipt_detail_page.dart';
-import '../../core/theme/app_theme.dart'; 
 
 // 공통코드 모델
 class CodeModel {
@@ -45,6 +44,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
   bool _loadingCodes = true;
+  bool _isWorkConfirmed = false;
 
   final Set<int> _selectedIdx = {};
 
@@ -95,42 +95,75 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
 
   // 경비내역 조회
   Future<void> _loadReceipts() async {
+    final userId = (await AppSession.userId() ?? "").trim();
     setState(() {
       _loading = true;
       _selectedIdx.clear();
     });
 
     try {
-      final list = await BizService.search(
-        siq: "project.receiptMng",
-        outDs: "rtnList",
-        params: {
-          "year": widget.yearMonth.substring(0, 4),
-          "empId": _empId,
-          "SEARCH_USER_ID": _empId,
-          "sql": "N",
-          "gvSubTotal": "Sub Total",
-          "gvTotal": "Total",
-          "_mtd": "getList",
-          "yearMonth": widget.yearMonth,
-          "project": widget.projectCd,
-          "expenseCode": _selectedExpCd == "ALL" ? "" : _selectedExpCd,
-        },
+      final results = await BizService.searchList(
+        tranList: [
+          // 경비 내역
+          TranData(
+              siq: "project.receiptMng",
+              outDs: "rtnList",
+              params: {
+                "year": widget.yearMonth.substring(0, 4),
+                "userId": userId,
+                "sql": "N",
+                "gvSubTotal": "Sub Total",
+                "gvTotal": "Total",
+                "_mtd": "getList",
+                "yearMonth": widget.yearMonth,
+                "project": widget.projectCd,
+                "expenseCode": _selectedExpCd == "ALL" ? "" : _selectedExpCd,
+              }
+          ),
+          // 근무일지 확정 여부
+          TranData(
+            siq: "master.workCalConfirm",
+            outDs: "rtnList2",
+            params: {
+              "yearMonth": widget.yearMonth.replaceAll('-', ''),
+              "empId": _empId,
+            },
+          ),
+        ],
       );
 
-      final filtered = list.where((m) {
-        final p = (m["PROJECT_CD"] ?? "").toString();
-        return !p.toLowerCase().contains("total");
-      }).toList();
+      final list = (results["rtnList"] ?? []).cast<Map<String, dynamic>>();
+      final confirmRows = (results["rtnList2"] ?? []).cast<Map<String, dynamic>>();
 
       if (!mounted) return;
-      setState(() => _items = filtered);
+      setState(() {
+        _items = list.where((m) {
+          final p = (m["PROJECT_CD"] ?? "").toString().toLowerCase();
+          final u = (m["USER_ID"] ?? "").toString().trim();
+          return !p.contains("total") && (u == _empId || u.isEmpty);
+        }).toList();
+
+        // 근무일자 확정 여부
+        if (confirmRows.isNotEmpty) {
+          _isWorkConfirmed = (int.tryParse(confirmRows[0]["CNT"].toString()) ?? 0) > 0;
+        }
+      });
+
     } catch (e) {
-      debugPrint("조회 에러 발생: $e");
+      debugPrint("목록 조회 에러 발생: $e");
       if (mounted) setState(() => _items = []);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  int _calcTotal() {
+    int receiptSum = 0;
+    for (final m in _items) {
+      final v = m["PRICE"];
+      receiptSum += int.tryParse((v ?? "0").toString()) ?? 0;
+    }
+    return receiptSum;
   }
 
   // 삭제
@@ -204,15 +237,6 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     }
   }
 
-  int _calcTotal() {
-    int sum = 0;
-    for (final m in _items) {
-      final v = m["PRICE"];
-      sum += int.tryParse((v ?? "0").toString()) ?? 0;
-    }
-    return sum;
-  }
-
   void _toggleAll(bool? checked) {
     setState(() {
       _selectedIdx.clear();
@@ -254,7 +278,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     final allChecked = _items.isNotEmpty && _selectedIdx.length == _items.length;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF5F5F7),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -281,80 +305,37 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
 
   // 총 금액
   Widget _buildSummaryCard(int total) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-      child: SizedBox(
-        width: double.infinity, // 🔥 이게 핵심
-        child: Card(
-          color: AppTheme.softBg,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  "총액",
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.ink.withOpacity(0.6),
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "${NumberFormat('#,###').format(total)}원",
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        color: AppTheme.primary,
-                      ),
-                ),
-              ],
-            ),
-          ),
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      decoration: BoxDecoration(color: const Color(0xFFE8EAF6), borderRadius: BorderRadius.circular(16)),
+      child: Center(
+        child: Text(
+          "총 ${NumberFormat('#,###').format(total)}원",
+          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF3F51B5)),
         ),
       ),
     );
   }
 
   // 필터
- Widget _buildFilterArea() {
+  Widget _buildFilterArea() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
-        height: 52,
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: AppTheme.softBg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppTheme.border),
-        ),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
         child: DropdownButtonHideUnderline(
           child: DropdownButton<String>(
             isExpanded: true,
             value: _selectedExpCd,
-            icon: const Icon(Icons.keyboard_arrow_down_rounded),
-            items: _expenseCodes
-                .map(
-                  (c) => DropdownMenuItem(
-                    value: c.codeCd,
-                    child: Text(
-                      c.codeNm,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
-                  ),
-                )
-                .toList(),
-            onChanged: _loadingCodes
-                ? null
-                : (v) async {
-                    if (v == null) return;
-                    setState(() => _selectedExpCd = v);
-                    await _loadReceipts();
-                  },
+            items: _expenseCodes.map((c) => DropdownMenuItem(value: c.codeCd, child: Text(c.codeNm))).toList(),
+            onChanged: _loadingCodes ? null : (v) async {
+              if (v == null) return;
+              setState(() => _selectedExpCd = v);
+              await _loadReceipts();
+            },
           ),
         ),
       ),
@@ -362,47 +343,33 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
   }
 
   Widget _buildSelectionHeader(bool allChecked) {
-  final textStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-        fontWeight: FontWeight.w900,
-      );
-
-  return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
       child: Row(
         children: [
-          Transform.scale(
-            scale: 1.05,
-            child: Checkbox(
-              value: allChecked,
-              onChanged: _loading ? null : _toggleAll,
-              activeColor: AppTheme.primary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-              side: const BorderSide(color: AppTheme.primary, width: 1),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text("전체 선택", style: textStyle),
+          Checkbox(value: allChecked, onChanged: _loading ? null : _toggleAll, activeColor: Colors.black),
+          const Text("전체 선택", style: TextStyle(fontWeight: FontWeight.bold)),
           const Spacer(),
-          Text(widget.yearMonth, style: textStyle),
+          Text(widget.yearMonth, style: const TextStyle(fontWeight: FontWeight.w800)),
         ],
       ),
     );
   }
 
   // 리스트
-   Widget _buildListView() {
+  Widget _buildListView() {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_items.isEmpty) return const Center(child: Text("내역이 없습니다."));
 
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: _items.length,
       itemBuilder: (context, index) {
         final item = _items[index];
         final expNm = (item["EXP_NM"] ?? "").toString();
         final expCd = (item["EXP_CD"] ?? "").toString();
         final recDate = (item["REC_DATE"] ?? "").toString();
-
+        // 날짜 형식 변환
         String formattedDate = recDate;
         if (recDate.contains("-")) {
           try {
@@ -412,24 +379,39 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               final day = int.parse(parts[2]);
               formattedDate = "$month월 $day일";
             }
-          } catch (_) {}
+          } catch (e) {
+            debugPrint("날짜 하이픈 파싱 에러: $e");
+          }
         } else if (recDate.length == 8) {
           try {
             final month = int.parse(recDate.substring(4, 6));
             final day = int.parse(recDate.substring(6, 8));
             formattedDate = "$month월 $day일";
-          } catch (_) {}
+          } catch (e) {
+            debugPrint("날짜 8자리 파싱 에러: $e");
+          }
         }
-
         final price = int.tryParse((item["PRICE"] ?? "0").toString()) ?? 0;
+        final creditNm = item["CREDIT_CD"] == "CORPORATION" ? "법인" : "개인";
         final receiptCnt = (item["RECEIPT"] ?? "").toString();
+        final bool isConfirmed = (item["CONFIRM_YN"] ?? "N") == "Y"; // 확정 여부
 
-        return Card(
-          color: AppTheme.softBg,
+        return Container(
           margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isConfirmed ? Colors.grey.shade100 : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              if(!isConfirmed)
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
+            ],
+              border: isConfirmed ? Border.all(color: Colors.grey.shade300) : null,
+          ),
           child: InkWell(
-            borderRadius: BorderRadius.circular(22), // CardTheme radius와 맞춰줌
-            onTap: () async {
+            onTap:
+              // ? () => _showMsg("확정된 데이터는 수정할 수 없습니다.")
+              () async {
               final result = await Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -443,81 +425,61 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               );
               if (result == true) await _loadReceipts();
             },
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  Transform.scale(
-                    scale: 1.08,
-                    child: Checkbox(
-                      value: _selectedIdx.contains(index),
-                      activeColor: AppTheme.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                      side: const BorderSide(color: AppTheme.primary, width: 1),
-                      onChanged: (v) => setState(() {
-                        if (v == true) {
-                          _selectedIdx.add(index);
-                        } else {
-                          _selectedIdx.remove(index);
-                        }
-                      }),
-                    ),
+            child: Row(
+              children: [
+                Transform.scale(
+                  scale: 1.2,
+                  child: Checkbox(
+                    value: _selectedIdx.contains(index),
+                    activeColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    onChanged: isConfirmed
+                      ? null
+                      : (v) => setState(() => v == true ? _selectedIdx.add(index) : _selectedIdx.remove(index)),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          expNm.isEmpty ? expCd : expNm,
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w900,
-                              ),
-                          overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        expNm.isEmpty ? expCd : expNm,
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: isConfirmed ? Colors.grey : const Color(0xFF1E2A3B)
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          formattedDate,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.ink.withOpacity(0.55),
-                              ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        formattedDate,
+                        style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w500
                         ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.description_outlined,
-                              size: 16,
-                              color: AppTheme.ink.withOpacity(0.45),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              "영수증 ${receiptCnt}장",
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppTheme.ink.withOpacity(0.55),
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(Icons.description_outlined, size: 16, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Text(
+                            "영수증 ${receiptCnt}장", // 영수증 개수 표시
+                            style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  Text(
-                    "${NumberFormat('#,###').format(price)}원",
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontSize: 18.5,
-                          fontWeight: FontWeight.w900,
-                          color: AppTheme.primary,
-                        ),
-                  ),
-                ],
-              ),
+                ),
+                Text(
+                  "${NumberFormat('#,###').format(price)}원",
+                  style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: Colors.black),
+                ),
+              ],
             ),
           ),
         );
@@ -527,6 +489,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
 
   // 하단영역
   Widget _buildBottomButtons() {
+    final bool isConfirmed = _items.any((item) => (item["CONFIRM_YN"] ?? "N") == "Y");
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -545,15 +508,17 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
             Expanded(
               child: SizedBox(
                 height: 54,
-                child: OutlinedButton(
-                  onPressed: _loading ? null : _deleteSelected,
-                  child: const Text(
-                    "삭제",
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                    ),
+                child: ElevatedButton(
+                  onPressed: (isConfirmed || _loading || !_isWorkConfirmed)
+                      ? null
+                      : _deleteSelected,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF7D6B),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
                   ),
+                  child: const Text("삭제", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ),
@@ -562,7 +527,13 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               child: SizedBox(
                 height: 54,
                 child: ElevatedButton(
-                  onPressed: () async {
+                  onPressed: (isConfirmed || _loading || !_isWorkConfirmed)
+                  ? null
+                  : () async {
+                    if (!_isWorkConfirmed) {
+                      _showMsg("해당 월의 근무일지가 확정되지 않았습니다.\n근무일지 먼저 작성 후 확정해주세요.");
+                      return;
+                    }
                     final result = await Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -575,11 +546,13 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                     );
                     if (result == true) await _loadReceipts();
                   },
-                  // ✅ 여기서는 style 지정 X → AppTheme.elevatedButtonTheme 그대로 사용
-                  child: const Text(
-                    "추가",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2F6BFF),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
                   ),
+                  child: const Text("추가", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ),
