@@ -394,19 +394,24 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         final price = int.tryParse((item["PRICE"] ?? "0").toString()) ?? 0;
         final creditNm = item["CREDIT_CD"] == "CORPORATION" ? "법인" : "개인";
         final receiptCnt = (item["RECEIPT"] ?? "").toString();
+        final bool isConfirmed = (item["CONFIRM_YN"] ?? "N") == "Y"; // 확정 여부
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isConfirmed ? Colors.grey.shade100 : Colors.white,
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
+              if(!isConfirmed)
               BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
             ],
+              border: isConfirmed ? Border.all(color: Colors.grey.shade300) : null,
           ),
           child: InkWell(
-            onTap: () async {
+            onTap:
+              // ? () => _showMsg("확정된 데이터는 수정할 수 없습니다.")
+              () async {
               final result = await Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -428,7 +433,9 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                     value: _selectedIdx.contains(index),
                     activeColor: Colors.black,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                    onChanged: (v) => setState(() => v == true ? _selectedIdx.add(index) : _selectedIdx.remove(index)),
+                    onChanged: isConfirmed
+                      ? null
+                      : (v) => setState(() => v == true ? _selectedIdx.add(index) : _selectedIdx.remove(index)),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -438,10 +445,10 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                     children: [
                       Text(
                         expNm.isEmpty ? expCd : expNm,
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E2A3B)
+                            color: isConfirmed ? Colors.grey : const Color(0xFF1E2A3B)
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -482,6 +489,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
 
   // 하단영역
   Widget _buildBottomButtons() {
+    final bool isConfirmed = _items.any((item) => (item["CONFIRM_YN"] ?? "N") == "Y");
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -501,7 +509,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               child: SizedBox(
                 height: 54,
                 child: ElevatedButton(
-                  onPressed: (_loading || !_isWorkConfirmed)
+                  onPressed: (isConfirmed || _loading || !_isWorkConfirmed)
                       ? null
                       : _deleteSelected,
                   style: ElevatedButton.styleFrom(
@@ -519,7 +527,9 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               child: SizedBox(
                 height: 54,
                 child: ElevatedButton(
-                  onPressed: () async {
+                  onPressed: (isConfirmed || _loading || !_isWorkConfirmed)
+                  ? null
+                  : () async {
                     if (!_isWorkConfirmed) {
                       _showMsg("해당 월의 근무일지가 확정되지 않았습니다.\n근무일지 먼저 작성 후 확정해주세요.");
                       return;

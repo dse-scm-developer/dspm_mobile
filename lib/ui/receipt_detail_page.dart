@@ -61,6 +61,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
 
   bool _isSaving = false;
   bool _loadingCodes = true;
+  bool get _isConfirmed => (widget.receiptData?['CONFIRM_YN'] ??'N') == 'Y';
 
   // 서버에 이미 저장된 파일 목록
   List<Map<String, dynamic>> _serverFiles = [];
@@ -223,6 +224,13 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   // 경비 내역 저장 함수
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _isSaving) return;
+    final String inputDate = _dateCtrl.text.replaceAll('-', '');
+    final String inputYm = inputDate.substring(0, 6); 
+    final String targetYm = widget.yearMonth.replaceAll('-', '');
+    if (inputYm != targetYm) {
+      _showMsg("일자는 조회한 연월(${widget.yearMonth})과 같아야 합니다.");
+      return;
+    }
     setState(() => _isSaving = true);
 
     try {
@@ -436,7 +444,9 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
           ),
         ),
       ),
-      bottomNavigationBar: _buildSaveButton(),
+      bottomNavigationBar: _isConfirmed
+        ? null
+        : _buildSaveButton(),
     );
   }
 
@@ -449,7 +459,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
 
   Widget _buildDateField() {
     return InkWell(
-      onTap: _pickDate,
+      onTap: _isConfirmed ? null : _pickDate,
       child: Container(
         height: 52,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -470,7 +480,8 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     return DropdownButtonFormField<String>(
       value: _selectedExpCd.isEmpty ? null : _selectedExpCd,
       items: _expenseCodes.map((c) => DropdownMenuItem(value: c.codeCd, child: Text(c.codeNm))).toList(),
-      onChanged: (v) {
+      onChanged: _isConfirmed ? null
+        : (v) {
         if (v == null) return;
         setState(() {
           _selectedExpCd = v;
@@ -493,7 +504,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     return DropdownButtonFormField<String>(
       value: _selectedCreditCd,
       items: _creditOptions.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
-      onChanged: (v) => setState(() => _selectedCreditCd = v ?? "개인"),
+      onChanged: _isConfirmed ? null : (v) => setState(() => _selectedCreditCd = v ?? "개인"),
       decoration: InputDecoration(
         filled: true,
         fillColor: const Color(0xFFF6F8FB),
@@ -506,7 +517,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     bool isDayPay = (_selectedExpCd == "251");
     return TextFormField(
       controller: _priceCtrl,
-      readOnly: isDayPay, // 일비는 수정 불가
+      readOnly: isDayPay || _isConfirmed,
       keyboardType: TextInputType.number,
       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2F6BFF)),
       decoration: InputDecoration(
@@ -521,6 +532,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   Widget _buildContentsField() {
     return TextFormField(
       controller: _contentsCtrl,
+      readOnly: _isConfirmed,
       maxLines: 3,
       decoration: InputDecoration(
         hintText: "내용을 입력하세요",
@@ -631,6 +643,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
             ),
           ),
         ),
+        if(!_isConfirmed)
         Positioned(
           top: 4,
           right: 16,
@@ -650,7 +663,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   // 이미지 추가 버튼
   Widget _buildAddImageBtn() {
     return GestureDetector(
-      onTap: _pickImages,
+      onTap: _isConfirmed ? null : _pickImages,
       child: Container(
         width: 80,
         height: 100,
