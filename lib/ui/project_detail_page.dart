@@ -595,7 +595,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
   // ===================
   Widget _buildBottomButtons(BuildContext context) {
     final bool anyConfirmed = _items.any((item) => (item["CONFIRM_YN"] ?? "N") == "Y");
-    final disabled = (anyConfirmed || _loading || !_isWorkConfirmed);
+    final disabled = (anyConfirmed || _loading);
 
     return SafeArea(
       child: Container(
