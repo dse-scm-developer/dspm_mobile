@@ -344,11 +344,11 @@ class _ProjectCard extends StatelessWidget {
       child: ListTile(
         title: Text(
           projectNm,
-          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
         ),
         trailing: Text(
           "${NumberFormat('#,###').format(price)}원",
-          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
         ),
         onTap: onTap,
       ),

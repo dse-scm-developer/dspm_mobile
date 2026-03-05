@@ -320,7 +320,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                 Text(
                   "총액",
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                         color: AppTheme.ink.withOpacity(0.6),
                       ),
@@ -530,8 +530,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                       children: [
                         Text(
                           expNm.isEmpty ? expCd : expNm,
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontSize: 17,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontSize: 16,
                                 fontWeight: FontWeight.w900,
                                 color: isConfirmed
                                     ? AppTheme.ink.withOpacity(0.45)

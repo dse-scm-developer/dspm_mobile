@@ -1,4 +1,4 @@
-package com.example.dspm_mobile
+package com.dsetrade.dspm.mobile
 
 import io.flutter.embedding.android.FlutterActivity
 
