@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/cupertino.dart';
 import '../../../core/config/env.dart';
 import '../../../core/network/session_dio.dart';
 import 'tran_data.dart';
@@ -45,7 +44,7 @@ class BizService {
     };
 
     final Response res =
-        await SessionDio.dio.post(Env.mobilePath + "search", data: payload);
+        await SessionDio.dio.post("${Env.mobilePath}search", data: payload);
 
     final data = Map<String, dynamic>.from(res.data as Map);
     final list = (data[outDs] as List<dynamic>? ?? []);
@@ -64,7 +63,7 @@ class BizService {
     };
     
     final Response res =
-        await SessionDio.dio.post(Env.mobilePath + "search", data: payload);
+        await SessionDio.dio.post("${Env.mobilePath}search", data: payload);
 
     final data = Map<String, dynamic>.from(res.data as Map);
 
@@ -100,7 +99,7 @@ class BizService {
     };
 
     final Response res =
-        await SessionDio.dio.post(Env.mobilePath + "save", data: payload);
+        await SessionDio.dio.post("${Env.mobilePath}save", data: payload);
 
     final data = Map<String, dynamic>.from(res.data as Map);
     return int.tryParse((data[outDs] ?? "0").toString()) ?? 0;
@@ -127,7 +126,7 @@ class BizService {
     };
 
     final Response res =
-        await SessionDio.dio.post(Env.mobilePath + "saveUpdate", data: payload);
+        await SessionDio.dio.post("${Env.mobilePath}saveUpdate", data: payload);
 
     final data = Map<String, dynamic>.from(res.data as Map);
     return int.tryParse((data[outDs] ?? "0").toString()) ?? 0;
@@ -156,7 +155,7 @@ class BizService {
     };
 
     final Response res =
-        await SessionDio.dio.post(Env.mobilePath + "vacation/save", data: payload);
+        await SessionDio.dio.post("${Env.mobilePath}vacation/save", data: payload);
 
     return Map<String, dynamic>.from(res.data as Map);
   }

@@ -1,6 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
-
 import '../config/env.dart';
 
 // ✅ Mobile에서만 필요

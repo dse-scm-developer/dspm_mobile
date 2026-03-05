@@ -4,6 +4,7 @@ import 'vacation_page.dart';
 import 'work_log_page.dart';
 import 'privacy_policy_page.dart';
 import 'receipt_page.dart';
+import 'login_page.dart';
 
 class HomePage extends StatefulWidget  {
   const HomePage({super.key});
@@ -35,6 +36,18 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _logout() async {
+    await AppSession.clear();
+
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -54,13 +67,21 @@ class _HomePageState extends State<HomePage> {
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Color(0xFF1E2A3B)),
-            onSelected: (value) {
-              if (value == 'privacy') _openPrivacyPolicy();
+            onSelected: (value) async {
+              if (value == 'privacy') {
+                _openPrivacyPolicy();
+              } else if (value == 'logout') {
+                await _logout();
+              }
             },
             itemBuilder: (_) => const [
               PopupMenuItem<String>(
                 value: 'privacy',
                 child: Text('개인정보처리방침'),
+              ),
+              PopupMenuItem<String>(
+                value: 'logout',
+                child: Text('로그아웃'),
               ),
             ],
           ),

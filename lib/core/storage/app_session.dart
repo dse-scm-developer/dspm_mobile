@@ -70,4 +70,10 @@ class AppSession {
     if (list.isEmpty) return "";
     return Map<String, dynamic>.from(list[0])["CODE_CD"]?.toString() ?? "";
   }
+  
+  static Future<bool> hasLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final id = prefs.getString(_keyUserId);
+    return id != null && id.trim().isNotEmpty;
+  }
 }
