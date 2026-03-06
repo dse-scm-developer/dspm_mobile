@@ -277,8 +277,8 @@ class _WorkLogPageState extends State<WorkLogPage> {
 
   Future<void> _saveAll() async {
     FocusScope.of(context).unfocus();
-
-    final rowList = _rows.map((r) => r.toSaveMap()).toList();
+    final changedRows = _rows.where((r) => r.isModified).toList();
+    final rowList = changedRows.map((r) => r.toSaveMap()).toList();
 
     if (rowList.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -304,13 +304,68 @@ class _WorkLogPageState extends State<WorkLogPage> {
       );
 
       if (!mounted) return;
+
+      await _loadMonthRows(_month);
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("저장 완료 ($cnt)")),
+        SnackBar(content: Text("저장이 완료되었습니다.")),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("저장 실패: $e")),
+        SnackBar(content: Text("저장이 실패했습니다. 관리자에게 문의 바랍니다.")),
+      );
+    }
+  }
+
+  Future<void> _confirmAll() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('확정'),
+        content: const Text('근무일지를 확정하시겠습니까?\n확정 후 수정이 제한될 수 있습니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('확정'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    final yearMonth = DateFormat("yyyyMM").format(_month);
+    final rowData = [
+      { "EMP_ID": _empId,
+        "CONFIRM_FLAG": "Y",
+        "yearMonth": yearMonth,
+        "state": "updated",
+      }
+    ];
+
+    try {
+      final cnt = await BizService.saveUpdate(
+        siq: "master.workCalConFirm",
+        outDs: "saveCnt",
+        rows: rowData,
+      );
+
+      if (!mounted) return;
+
+      await _loadMonthRows(_month);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("확정되었습니다.")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("확정 실패, 관리자에게 문의 바랍니다.")),
       );
     }
   }
@@ -325,94 +380,138 @@ class _WorkLogPageState extends State<WorkLogPage> {
       appBar: AppBar(
         title: const Text("근무일지"),
         actions: [
-          IconButton(
-            tooltip: "월 선택",
-            onPressed: _pickMonth,
-            icon: const Icon(Icons.calendar_month_outlined),
-          ),
+          // IconButton(
+          //   tooltip: "월 선택",
+          //   onPressed: _pickMonth,
+          //   icon: const Icon(Icons.calendar_month_outlined),
+          // ),
           IconButton(
             tooltip: "저장",
             onPressed: isBusy ? null : _saveAll,
             icon: const Icon(Icons.save_outlined),
           ),
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              if (value == 'confirm') {
+                await _confirmAll();
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem<String>(
+                value: 'confirm',
+                child: Text('확정'),
+              ),
+            ],
+          ),
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ✅ 상단 정보 바(Home 스타일)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppTheme.softBg,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.border),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(9),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withOpacity(0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.person_outline, color: AppTheme.primary, size: 18),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    "사원명: $_employeeName",
-                    style: const TextStyle(fontWeight: FontWeight.w900, color: AppTheme.ink),
-                  ),
-                  const Spacer(),
-                  Text(
-                    monthTitle,
-                    style: const TextStyle(fontWeight: FontWeight.w900, color: AppTheme.ink),
-                  ),
-                  const SizedBox(width: 12),
-                  if (isBusy)
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                ],
-              ),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.softBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.border),
             ),
-            const SizedBox(height: 12),
-
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: Container(
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(9),
                   decoration: BoxDecoration(
-                    border: Border.all(color: AppTheme.border),
-                    color: Colors.white,
+                    color: AppTheme.primary.withOpacity(0.12),
+                    shape: BoxShape.circle,
                   ),
-                  child: Scrollbar(
-                    thumbVisibility: true,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SizedBox(
-                        width: 980,
-                        child: ListView.builder(
-                          itemCount: _rows.length + 1,
-                          itemBuilder: (context, index) {
-                            if (index == 0) return _buildHeaderRow();
-                            final row = _rows[index - 1];
-                            return _buildDataRow(row, index - 1);
-                          },
+                  child: const Icon(
+                    Icons.person_outline,
+                    color: AppTheme.primary,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  "사원명: $_employeeName",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: AppTheme.ink,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        monthTitle,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.ink,
                         ),
+                      ),
+                      const SizedBox(width: 6),
+                      InkWell(
+                        onTap: isBusy ? null : _pickMonth,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Icon(
+                          Icons.calendar_month_outlined,
+                          size: 18,
+                          color: isBusy ? Colors.grey : AppTheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                if (isBusy)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppTheme.border),
+                  color: Colors.white,
+                ),
+                child: Scrollbar(
+                  thumbVisibility: true,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: 980,
+                      child: ListView.builder(
+                        itemCount: _rows.length + 1,
+                        itemBuilder: (context, index) {
+                          if (index == 0) return _buildHeaderRow();
+                          final row = _rows[index - 1];
+                          return _buildDataRow(row, index - 1);
+                        },
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    ),
     );
   }
 
@@ -503,6 +602,7 @@ class _WorkLogPageState extends State<WorkLogPage> {
                       if (v == null) return;
                       setState(() {
                         row.workType = v;
+                        row.isModified = true;
                         if (_offWorkTypeCodes.contains(v)) {
                           row.workArea = "";
                           row.project = "";
@@ -533,7 +633,12 @@ class _WorkLogPageState extends State<WorkLogPage> {
                     isExpanded: true,
                     icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
                     items: locationItems,
-                    onChanged: (v) => setState(() => row.workArea = v ?? ""),
+                    onChanged: (v) { 
+                      setState(() { 
+                        row.workArea = v ?? ""; 
+                        row.isModified = true;
+                      });
+                    },
                     style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.ink),
                   ),
                 ),
@@ -555,7 +660,12 @@ class _WorkLogPageState extends State<WorkLogPage> {
                     isExpanded: true,
                     icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
                     items: projectItems,
-                    onChanged: (v) => setState(() => row.project = v ?? ""),
+                    onChanged: (v) {
+                      setState(() { 
+                        row.project = v ?? "";
+                        row.isModified = true;
+                      });
+                    },
                     style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.ink),
                   ),
                 ),
@@ -586,7 +696,10 @@ class _WorkLogPageState extends State<WorkLogPage> {
                     disabledBorder: InputBorder.none,
                     hintText: "",
                   ),
-                  onChanged: (v) => row.remark = v,
+                  onChanged: (v) {  
+                    row.remark = v;
+                    row.isModified = true;
+                  },
                 ),
               ),
             ),
@@ -636,6 +749,8 @@ class _Cell extends StatelessWidget {
 
 class _WorkLogRow {
   final DateTime date;
+
+  bool isModified = false;
 
   String? companyCd;
   String? buCd;
