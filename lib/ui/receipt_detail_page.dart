@@ -94,6 +94,8 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
 
   Future<void> _initData() async {
     final empId = (await AppSession.userId() ?? "").trim();
+    final company = (await AppSession.company()) ?? "";
+    final bu = (await AppSession.bu()) ?? "";
     setState(() => _empId = empId);
     try {
       final result = await BizService.searchList(
@@ -268,9 +270,13 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
 
   // 경비 내역 저장 함수
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate() || _isSaving) return;
+    final userId = (await AppSession.userId() ?? "").trim();
+    final company = (await AppSession.company()) ?? "";
+    final bu = (await AppSession.bu()) ?? "";
+    // if (!_formKey.currentState!.validate() || _isSaving) return;
+    if (_isSaving) return;
     final String inputDate = _dateCtrl.text.replaceAll('-', '');
-    final String inputYm = inputDate.substring(0, 6); 
+    final String inputYm = inputDate.substring(0, 6);
     final String targetYm = widget.yearMonth.replaceAll('-', '');
     if (inputYm != targetYm) {
       _showMsg("일자는 조회한 연월(${widget.yearMonth})과 같아야 합니다.");
@@ -285,20 +291,29 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
         ...(widget.receiptData ?? {}),
         "PROJECT_CD": widget.projectCd,
         "YEARMONTH": widget.yearMonth.replaceAll('-', ''),
-        "REC_DATE": _dateCtrl.text.replaceAll('-', ''),
+        "REC_DATE": _dateCtrl.text,
         "EXP_CD": _selectedExpCd,
-        "CONTENTS": _contentsCtrl.text,
+        "CONTENTS": _contentsCtrl.text.isEmpty ? "-" : _contentsCtrl.text,
         "PRICE": int.tryParse(_priceCtrl.text.replaceAll(',', '')) ?? 0,
-        "CREDIT_CD": _selectedCreditCd == "법인" ? "CORPORATION" : "INDIVIDUAL",
+        "CREDIT_CD": _selectedCreditCd,
         "USER_ID": _empId,
         "state": isNew ? "inserted" : "updated",
+        "GV_USER_ID": _empId,
+        "GV_COMPANY_CD": "DSE",
+        "GV_BU_CD": "DS",
+        "_ROWNUM": "1",
       };
 
-      await BizService.save(
+      final saveResult = await BizService.save(
         siq: "project.receiptMng",
         outDs: "saveCnt",
         rows: [row],
-        extraParams: {"_mtd": "saveAll"},
+        extraParams: {
+          "_mtd": "saveAll",
+          "sql": "N",
+          "gvTotal": "Total",
+          "gvSubTotal": "Sub Total"
+        },
       );
 
       String finalRecSeq = widget.receiptData?['REC_SEQ']?.toString() ?? "";
@@ -312,7 +327,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
               outDs: "rtnList",
               params: {
                 "year": widget.yearMonth.substring(0, 4),
-                "userId": _empId,
+                "userId": userId,
                 "yearMonth": widget.yearMonth,
                 "project": widget.projectCd,
                 "expenseCode": "",
@@ -441,48 +456,48 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
       body: _loadingCodes
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildImageSection(context),
-                    const SizedBox(height: 32),
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildImageSection(context),
+              const SizedBox(height: 32),
 
-                    _buildLabel(context, "경비일자"),
-                    const SizedBox(height: 8),
-                    _buildDateField(context),
+              _buildLabel(context, "경비일자"),
+              const SizedBox(height: 8),
+              _buildDateField(context),
 
-                    const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-                    _buildLabel(context, "경비 항목"),
-                    const SizedBox(height: 8),
-                    _buildExpTypeDropdown(context),
+              _buildLabel(context, "경비 항목"),
+              const SizedBox(height: 8),
+              _buildExpTypeDropdown(context),
 
-                    const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-                    _buildLabel(context, "개인/법인"),
-                    const SizedBox(height: 8),
-                    _buildCreditTypeDropdown(context),
+              _buildLabel(context, "개인/법인"),
+              const SizedBox(height: 8),
+              _buildCreditTypeDropdown(context),
 
-                    const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-                    _buildLabel(context, "금액"),
-                    const SizedBox(height: 8),
-                    _buildPriceField(context),
+              _buildLabel(context, "금액"),
+              const SizedBox(height: 8),
+              _buildPriceField(context),
 
-                    const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-                    _buildLabel(context, "내용"),
-                    const SizedBox(height: 8),
-                    _buildContentsField(context),
+              _buildLabel(context, "내용"),
+              const SizedBox(height: 8),
+              _buildContentsField(context),
 
-                    const SizedBox(height: 40),
-                  ],
-                ),
-              ),
-            ),
+              const SizedBox(height: 40),
+            ],
+          ),
+        ),
+      ),
       bottomNavigationBar: _isConfirmed ? null : _buildSaveButton(context),
     );
   }
@@ -491,10 +506,10 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     return Text(
       text,
       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: AppTheme.ink,
-          ),
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+        color: AppTheme.ink,
+      ),
     );
   }
 
@@ -520,27 +535,27 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
       value: _selectedExpCd.isEmpty ? null : _selectedExpCd,
       items: _expenseCodes
           .map((c) => DropdownMenuItem(
-                value: c.codeCd,
-                child: Text(
-                  c.codeNm,
-                  overflow: TextOverflow.ellipsis,
-                  // style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-              ))
+        value: c.codeCd,
+        child: Text(
+          c.codeNm,
+          overflow: TextOverflow.ellipsis,
+          // style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ))
           .toList(),
       onChanged: _isConfirmed
           ? null
           : (v) {
-              if (v == null) return;
-              setState(() {
-                _selectedExpCd = v;
-                // 일비 선택시, 자동 계산
-                if (v == "251") {
-                  _priceCtrl.text = _calculateDayPay.toString();
-                  _contentsCtrl.text = "일비 자동 계산분";
-                }
-              });
-            },
+        if (v == null) return;
+        setState(() {
+          _selectedExpCd = v;
+          // 일비 선택시, 자동 계산
+          if (v == "251") {
+            _priceCtrl.text = _calculateDayPay.toString();
+            _contentsCtrl.text = "일비 자동 계산분";
+          }
+        });
+      },
       // ✅ decoration 비워서 InputDecorationTheme 적용
       decoration: const InputDecoration(),
     );
@@ -551,9 +566,9 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
       value: _selectedCreditCd,
       items: _creditOptions
           .map((val) => DropdownMenuItem(
-                value: val,
-                child: Text(val),
-              ))
+        value: val,
+        child: Text(val),
+      ))
           .toList(),
       onChanged: _isConfirmed ? null : (v) => setState(() => _selectedCreditCd = v ?? "개인"),
       decoration: const InputDecoration(),
@@ -569,10 +584,10 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
       enabled: !_isConfirmed,
       keyboardType: TextInputType.number,
       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontSize: 18,
-            fontWeight: FontWeight.w900,
-            color: AppTheme.primary,
-          ),
+        fontSize: 18,
+        fontWeight: FontWeight.w900,
+        color: AppTheme.primary,
+      ),
       decoration: const InputDecoration(
         suffixText: "원",
       ),
@@ -607,10 +622,10 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
             Text(
               "영수증 첨부",
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: AppTheme.ink,
-                  ),
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+                color: AppTheme.ink,
+              ),
             ),
             const SizedBox(height: 16),
 
