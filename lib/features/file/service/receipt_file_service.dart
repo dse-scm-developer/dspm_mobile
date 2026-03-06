@@ -34,18 +34,23 @@ class ReceiptFileService {
     try {
       final sp = await _sessionParams();
 
+      final userId = (params["USER_ID"] ?? sp["GV_USER_ID"] ?? sp["USER_ID"] ?? "")
+          .toString()
+          .trim();
       final yearMonthRaw = (params['YEARMONTH'] ?? '').toString();
       final yearMonth = yearMonthRaw.replaceAll(RegExp(r'[^0-9]'), '');
 
       final formData = FormData.fromMap({
         ...sp,
+        "GV_USER_ID": userId,
+        "USER_ID": userId,
         "PROJECT_CD": params['PROJECT_CD'],
         "DTL_REC_SEQ": params['DTL_REC_SEQ'],
         "YEARMONTH": yearMonth,
         "EXP_CD": params['EXP_CD'],
-        "USER_ID": sp["GV_USER_ID"],
       });
 
+      //  파일 추가
       for (final image in images) {
         formData.files.add(
           MapEntry(
@@ -61,6 +66,9 @@ class ReceiptFileService {
       final res = await SessionDio.dio.post(
         "${Env.mobilePath}file/receiptUpload",
         data: formData,
+        options: Options(
+          contentType: "multipart/form-data",
+        ),
       );
 
       return Map<String, dynamic>.from(res.data as Map);
