@@ -311,9 +311,7 @@ class _WorkLogPageState extends State<WorkLogPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("저장이 실패했습니다. 관리자에게 문의 바랍니다.")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("저장 실패: $e")));
     }
   }
 
@@ -363,9 +361,7 @@ class _WorkLogPageState extends State<WorkLogPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("확정 실패, 관리자에게 문의 바랍니다.")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("확정 실패: $e")));
     }
   }
 

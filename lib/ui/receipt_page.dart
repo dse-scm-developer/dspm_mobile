@@ -131,6 +131,57 @@ class _ReceiptPageState extends State<ReceiptPage> {
     setState(() => _projectList = list);
   }
 
+  Future<void> _confirmAll() async {
+    final userId = (await AppSession.userId() ?? "").trim();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('확정'),
+        content: const Text('경비를 확정하시겠습니까?\n확정 후 수정이 제한될 수 있습니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('확정'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    final yearMonth = DateFormat("yyyyMM").format(_month);
+    final rowData = [
+      { "userId": userId,
+        "confirm_yn": "Y",
+        "YEARMONTH": yearMonth,
+        "state": "updated",
+      }
+    ];
+
+    try {
+      final cnt = await BizService.saveUpdate(
+        siq: "project.receiptConfirm",
+        outDs: "saveCnt",
+        rows: rowData,
+      );
+
+      if (!mounted) return;
+
+      await _loadMonthData();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("확정되었습니다.")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("확정 실패: $e")));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final monthTitle = DateFormat("yyyy-MM").format(_month);
@@ -149,10 +200,23 @@ class _ReceiptPageState extends State<ReceiptPage> {
         ),
         iconTheme: const IconThemeData(color: Color(0xFF1E2A3B)),
         actions: [
-          IconButton(
-            tooltip: "월 선택",
-            onPressed: _pickMonth,
-            icon: const Icon(Icons.calendar_month_outlined),
+          // IconButton(
+          //   tooltip: "월 선택",
+          //   onPressed: _pickMonth,
+          //   icon: const Icon(Icons.calendar_month_outlined),
+          // ),
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              if (value == 'confirm') {
+                await _confirmAll();
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem<String>(
+                value: 'confirm',
+                child: Text('확정'),
+              ),
+            ],
           ),
         ],
       ),
@@ -214,37 +278,64 @@ class _ReceiptPageState extends State<ReceiptPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6F8FB),
+        color: AppTheme.softBg,
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.border),
       ),
       child: Row(
         children: [
-          const Icon(Icons.receipt_long_outlined, color: Color(0xFF2F6BFF)),
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.person_outline,
+              color: AppTheme.primary,
+              size: 18,
+            ),
+          ),
           const SizedBox(width: 8),
-          const Text(
+          Text(
             "월별 프로젝트 경비",
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF1E2A3B),
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              color: AppTheme.ink,
             ),
           ),
           const Spacer(),
-          Text(
-            monthTitle,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF1E2A3B),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.border),
             ),
-          ),
-          const SizedBox(width: 12),
-          if (_loading)
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+            child: Row(
+              children: [
+                Text(
+                  monthTitle,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: AppTheme.ink,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: _loading ? null : _pickMonth,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Icon(
+                    Icons.calendar_month_outlined,
+                    size: 18,
+                    color: _loading ? Colors.grey : AppTheme.primary,
+                  ),
+                ),
+              ],
             ),
-        ],
-      ),
+          )
+        ]
+      )
     );
   }
 

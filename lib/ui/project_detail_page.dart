@@ -176,6 +176,27 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
       return;
     }
 
+    // ✅ 삭제 확인 Alert
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("삭제"),
+        content: Text("선택한 ${_selectedIdx.length}건을 삭제하시겠습니까?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("취소"),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("삭제"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     setState(() {
       List<int> sortedIndices = _selectedIdx.toList()..sort((a, b) => b.compareTo(a));
 
@@ -186,12 +207,13 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
           deleteTarget["state"] = "deleted";
           _deletedItems.add(deleteTarget);
         }
-        _items.removeAt(index);
+        // _items.removeAt(index);
       }
       _selectedIdx.clear();
     });
 
-    _showMsg("저장 버튼을 눌러주세요");
+    // _showMsg("저장 버튼을 눌러주세요");
+    _saveAll();
   }
 
   // saveAll함수
@@ -228,7 +250,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
       );
 
       if (mounted) {
-        _showMsg("저장 완료");
+        _showMsg("저장이 완료되었습니다.");
         _deletedItems.clear();
         await _loadReceipts();
       }
@@ -282,12 +304,12 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(widget.projectNm),
-        actions: [
-          IconButton(
-            onPressed: _loading ? null : _saveAll,
-            icon: const Icon(Icons.save_outlined),
-          ),
-        ],
+        // actions: [
+        //   IconButton(
+        //     onPressed: _loading ? null : _saveAll,
+        //     icon: const Icon(Icons.save_outlined),
+        //   ),
+        // ],
       ),
       body: Column(
         children: [
