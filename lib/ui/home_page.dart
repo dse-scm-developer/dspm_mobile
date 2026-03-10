@@ -1,3 +1,4 @@
+import 'package:dspm_mobile/ui/vacation_apply_page.dart';
 import 'package:flutter/material.dart';
 import '../../core/storage/app_session.dart';
 import 'vacation_page.dart';
@@ -129,6 +130,17 @@ class _HomePageState extends State<HomePage> {
                 ),
                 delegate: SliverChildListDelegate(
                   [
+                    _HomeCard(
+                      icon: Icons.luggage_rounded,
+                      title: "휴가 내역",
+                      color: const Color(0xFF8B6EF8),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const VacationApplyPage()),
+                        );
+                      },
+                    ),
                     _HomeCard(
                       icon: Icons.beach_access_rounded,
                       title: "휴가 신청",
