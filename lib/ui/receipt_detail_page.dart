@@ -73,7 +73,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
 
   String _selectedExpCd = "";
   List<CodeModel> _expenseCodes = [];
-  String _selectedCreditCd = "개인";
+  String? _selectedCreditCd;
   final List<String> _creditOptions = ["개인", "법인"];
   String _empId = "";
   int _calculateDayPay = 0; // 일비
@@ -113,6 +113,8 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     if (data?['CREDIT_CD'] != null) {
       final dbValue = data!['CREDIT_CD'].toString();
       _selectedCreditCd = (dbValue == "CORPORATION") ? "법인" : "개인";
+    } else {
+      _selectedCreditCd = null;
     }
   }
 
@@ -147,9 +149,9 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
       if (!mounted) return;
       setState(() {
         _expenseCodes = codes;
-        if (_selectedExpCd.isEmpty && codes.isNotEmpty) {
+/*        if (_selectedExpCd.isEmpty && codes.isNotEmpty) {
           _selectedExpCd = codes[0].codeCd;
-        }
+        }*/
         if (dayPayRows.isNotEmpty) {
           _calculateDayPay = int.tryParse(dayPayRows[0]["DAY_PAY"].toString()) ?? 0;
         }
@@ -297,7 +299,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     final userId = (await AppSession.userId() ?? "").trim();
     final company = (await AppSession.company()) ?? "";
     final bu = (await AppSession.bu()) ?? "";
-    // if (!_formKey.currentState!.validate() || _isSaving) return;
+    if (!_formKey.currentState!.validate() || _isSaving) return;
     if (_isSaving) return;
     final String inputDate = _dateCtrl.text.replaceAll('-', '');
     final String inputYm = inputDate.substring(0, 6);
@@ -557,6 +559,8 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   Widget _buildExpTypeDropdown(BuildContext context) {
     return DropdownButtonFormField<String>(
       value: _selectedExpCd.isEmpty ? null : _selectedExpCd,
+      hint: const Text("항목을 선택하세요"),
+      validator: (value) => (value == null || value.isEmpty) ? "경비 항목을 선택하세요." : null,
       items: _expenseCodes
           .map((c) => DropdownMenuItem(
         value: c.codeCd,
@@ -588,6 +592,8 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
   Widget _buildCreditTypeDropdown(BuildContext context) {
     return DropdownButtonFormField<String>(
       value: _selectedCreditCd,
+      hint: const Text("결제 수단 선택"),
+      validator: (value) => (value == null || value.isEmpty) ? "개인/법인 중 선택하세요." : null,
       items: _creditOptions
           .map((val) => DropdownMenuItem(
         value: val,
@@ -604,6 +610,10 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
 
     return TextFormField(
       controller: _priceCtrl,
+      validator: (value) {
+        if (value == null || value.isEmpty || value == "0") return "금액을 입력하세요.";
+        return null;
+      },
       readOnly: isDayPay || _isConfirmed,
       enabled: !_isConfirmed,
       keyboardType: TextInputType.number,
