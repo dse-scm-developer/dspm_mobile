@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -21,6 +22,23 @@ class CodeModel {
     return CodeModel(
       codeCd: (json['CODE_CD'] ?? '').toString(),
       codeNm: (json['CODE_NM'] ?? '').toString(),
+    );
+  }
+}
+
+// 가격 형식 지정 클래스
+class ThousandsFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    if (newValue.text.isEmpty) {
+      return newValue.copyWith(text: '');
+    }
+    String newValueText = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final int value = int.parse(newValueText);
+    final String newText = NumberFormat('#,###').format(value);
+    return newValue.copyWith(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newText.length),
     );
   }
 }
@@ -83,7 +101,13 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
     _dateCtrl = TextEditingController(
       text: data?['REC_DATE'] ?? DateFormat('yyyy-MM-dd').format(DateTime.now()),
     );
-    _priceCtrl = TextEditingController(text: (data?['PRICE'] ?? '').toString());
+    final rawPrice = (data?['PRICE'] ?? '').toString();
+    String formattedPrice = '';
+    if (rawPrice.isNotEmpty) {
+      final n = int.tryParse(rawPrice) ?? 0;
+      formattedPrice = NumberFormat('#,###').format(n);
+    }
+    _priceCtrl = TextEditingController(text: formattedPrice);
     _contentsCtrl = TextEditingController(text: data?['CONTENTS'] ?? '');
     if (data?['EXP_CD'] != null) _selectedExpCd = data!['EXP_CD'].toString();
     if (data?['CREDIT_CD'] != null) {
@@ -551,7 +575,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
           _selectedExpCd = v;
           // 일비 선택시, 자동 계산
           if (v == "251") {
-            _priceCtrl.text = _calculateDayPay.toString();
+            _priceCtrl.text = NumberFormat('#,###').format(_calculateDayPay);
             _contentsCtrl.text = "일비 자동 계산분";
           }
         });
@@ -583,6 +607,10 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
       readOnly: isDayPay || _isConfirmed,
       enabled: !_isConfirmed,
       keyboardType: TextInputType.number,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        ThousandsFormatter(),
+      ],
       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
         fontSize: 18,
         fontWeight: FontWeight.w900,

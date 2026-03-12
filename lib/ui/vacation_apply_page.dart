@@ -119,28 +119,31 @@ class _VacationApplyPageState extends State<VacationApplyPage> {
       appBar: AppBar(
         title: const Text("휴가 내역"),
       ),
-      body: Column(
-        children: [
-          _buildTopSection(),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _applyList.isEmpty
-                ? _buildEmptyState()
-                : RefreshIndicator(
-              onRefresh: _loadVacationHistory,
-              color: AppTheme.primary,
-              child: ListView.builder(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-                itemCount: _applyList.length,
-                itemBuilder: (context, index) {
-                  return _buildHistoryRow(_applyList[index]);
-                },
+      body: SafeArea(
+        bottom: true,
+        child: Column(
+          children: [
+            _buildTopSection(),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _applyList.isEmpty
+                  ? _buildEmptyState()
+                  : RefreshIndicator(
+                onRefresh: _loadVacationHistory,
+                color: AppTheme.primary,
+                child: ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 60),
+                  itemCount: _applyList.length,
+                  itemBuilder: (context, index) {
+                    return _buildHistoryRow(_applyList[index]);
+                  },
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -269,20 +272,21 @@ class _VacationApplyPageState extends State<VacationApplyPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
-          // 날짜 + 일수
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                periodText,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: AppTheme.ink,
-                  height: 1.2,
+              Expanded(
+                child: Text(
+                  periodText,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: AppTheme.ink,
+                    height: 1.2,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Text(
                 "$days일",
                 style: const TextStyle(
@@ -294,39 +298,41 @@ class _VacationApplyPageState extends State<VacationApplyPage> {
             ],
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
-          // 휴가구분 + 사유
+          // 휴가구분 및 사유
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.softBg,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.border),
-                ),
-                child: Text(
-                  type,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.ink,
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.softBg,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.border),
+                  ),
+                  child: Text(
+                    type,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.ink,
+                    ),
                   ),
                 ),
               ),
               if (desc.isNotEmpty) ...[
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     desc,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: AppTheme.ink.withOpacity(0.55),
                     ),

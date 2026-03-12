@@ -46,6 +46,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
   bool _loading = true;
   bool _loadingCodes = true;
   bool _isWorkConfirmed = false;
+  bool _isReceiptConfirmed = false;
 
   final Set<int> _selectedIdx = {};
 
@@ -130,24 +131,45 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               "empId": _empId,
             },
           ),
+          // 경비 확정 여부
+          TranData(
+            siq: "project.receiptHdr",
+            outDs: "rtnList3",
+            params: {
+              "yearMonth": widget.yearMonth.replaceAll('-', ''),
+              "userId": userId,
+            },
+          ),
         ],
       );
 
       final list = (results["rtnList"] ?? []).cast<Map<String, dynamic>>();
-      final confirmRows = (results["rtnList2"] ?? []).cast<Map<String, dynamic>>();
+      final confirmRows = (results["rtnList2"] ?? []).cast<Map<String, dynamic>>(); // 근무일지 확정 여부
+      final receiptConfirmRows = (results["rtnList3"] ?? []).cast<Map<String, dynamic>>(); // 경비 확정 여부
 
       if (!mounted) return;
       setState(() {
+        // 근무확정여부
+        if (confirmRows.isNotEmpty) {
+          _isWorkConfirmed = (int.tryParse(confirmRows[0]["CNT"].toString()) ?? 0) > 0;
+        } else {
+          _isWorkConfirmed = false;
+        }
+
+        if (receiptConfirmRows.isNotEmpty) {
+          _isReceiptConfirmed =
+              (receiptConfirmRows[0]["CONFIRM_YN"] ?? "N").toString() == "Y";
+        } else {
+          _isReceiptConfirmed = false;
+        }
+
         _items = list.where((m) {
           final p = (m["PROJECT_CD"] ?? "").toString().toLowerCase();
           final u = (m["USER_ID"] ?? "").toString().trim();
           return !p.contains("total") && (u == _empId || u.isEmpty);
         }).toList();
 
-        // 근무일자 확정 여부
-        if (confirmRows.isNotEmpty) {
-          _isWorkConfirmed = (int.tryParse(confirmRows[0]["CNT"].toString()) ?? 0) > 0;
-        }
+
       });
 
     } catch (e) {
@@ -429,7 +451,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
             scale: 1.05,
             child: Checkbox(
               value: allChecked,
-              onChanged: _loading ? null : _toggleAll,
+              onChanged: (_loading || _isReceiptConfirmed) ? null : _toggleAll,
               // ✅ 대비 위해 primary 사용 (softBg + border와 겹쳐도 또렷)
               activeColor: AppTheme.primary,
               checkColor: Colors.white,
@@ -524,7 +546,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                     scale: 1.08,
                     child: Checkbox(
                       value: _selectedIdx.contains(index),
-                      onChanged: isConfirmed
+                      onChanged: (isConfirmed || _isReceiptConfirmed)
                           ? null
                           : (v) => setState(() {
                                 if (v == true) {
@@ -617,7 +639,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
   // ===================
   Widget _buildBottomButtons(BuildContext context) {
     final bool anyConfirmed = _items.any((item) => (item["CONFIRM_YN"] ?? "N") == "Y");
-    final disabled = (anyConfirmed || _loading);
+    final disabled = (anyConfirmed || _isReceiptConfirmed || _loading);
 
     return SafeArea(
       child: Container(
