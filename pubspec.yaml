@@ -1,7 +1,7 @@
 name: dspm_mobile
 description: "ds-etrade Project Management System"
 publish_to: 'none'
-version: 0.1.0+6
+version: 0.1.0+8
 
 environment:
   sdk: ^3.11.0
