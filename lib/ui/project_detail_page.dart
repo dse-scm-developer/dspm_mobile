@@ -678,10 +678,10 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                   onPressed: disabled
                       ? null
                       : () async {
-                          if (!_isWorkConfirmed) {
+/*                          if (!_isWorkConfirmed) {
                             _showMsg("해당 월의 근무일지가 확정되지 않았습니다.\n근무일지 먼저 작성 후 확정해주세요.");
                             return;
-                          }
+                          }*/
                           final result = await Navigator.push(
                             context,
                             MaterialPageRoute(

@@ -21,6 +21,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
   List<Map<String, dynamic>> _projectList = []; // 프로젝트 리스트
   int _totalPrice = 0;
   final Map<String, int> _projectSum = {}; // 프로젝트별 총액
+  bool _isWorkConfirmed = false;
 
   @override
   void initState() {
@@ -123,15 +124,39 @@ class _ReceiptPageState extends State<ReceiptPage> {
             "yearMonth": yearMonth,
           },
         ),
+        // 근무일지 확정 여부
+        TranData(
+          siq: "master.workCalConfirm",
+          outDs: "rtnList2",
+          params: {
+            "yearMonth": yearMonth,
+            "empId": userId,
+          },
+        ),
       ],
     );
     final list = (result["projectList"] ?? []).cast<Map<String, dynamic>>();
+    final confirmRows = (result["rtnList2"] ?? []).cast<Map<String, dynamic>>(); // 근무일지 확정 여부
 
     if (!mounted) return;
-    setState(() => _projectList = list);
+    setState(() {
+      _projectList = list;
+
+      // 근무일지 확정 여부
+      if (confirmRows.isNotEmpty) {
+        _isWorkConfirmed =
+            (int.tryParse(confirmRows[0]["CNT"].toString()) ?? 0) > 0;
+      } else {
+        _isWorkConfirmed = false;
+      }
+    });
   }
 
   Future<void> _confirmAll() async {
+      if (!_isWorkConfirmed) {
+        _showMsg("해당 월의 근무일지가 확정되지 않았습니다.\n근무일지 먼저 작성 후 확정해주세요.");
+        return;
+      }
     final userId = (await AppSession.userId() ?? "").trim();
     final ok = await showDialog<bool>(
       context: context,
@@ -180,6 +205,30 @@ class _ReceiptPageState extends State<ReceiptPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("확정 실패: $e")));
     }
+  }
+
+  void _showMsg(String msg) {
+    final double bottomMargin = MediaQuery.of(context).size.height * 0.1;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          msg,
+          style: const TextStyle(fontSize: 16, color: Colors.white),
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.black87,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: EdgeInsets.only(
+          bottom: bottomMargin,
+          left: 20,
+          right: 20,
+        ),
+        duration: const Duration(milliseconds: 1000),
+      ),
+    );
   }
 
   @override
