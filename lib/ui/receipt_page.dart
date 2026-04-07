@@ -153,11 +153,12 @@ class _ReceiptPageState extends State<ReceiptPage> {
   }
 
   Future<void> _confirmAll() async {
-      if (!_isWorkConfirmed) {
-        _showMsg("해당 월의 근무일지가 확정되지 않았습니다.\n근무일지 먼저 작성 후 확정해주세요.");
-        return;
-      }
+    if (!_isWorkConfirmed) {
+      _showMsg("해당 월의 근무일지가 확정되지 않았습니다.\n근무일지 먼저 작성 후 확정해주세요.");
+      return;
+    }
     final userId = (await AppSession.userId() ?? "").trim();
+    final yearMonth = DateFormat("yyyyMM").format(_month);
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -178,20 +179,88 @@ class _ReceiptPageState extends State<ReceiptPage> {
 
     if (ok != true) return;
 
-    final yearMonth = DateFormat("yyyyMM").format(_month);
-    final rowData = [
-      { "userId": userId,
-        "confirm_yn": "Y",
-        "YEARMONTH": yearMonth,
-        "state": "updated",
-      }
-    ];
-
     try {
-      final cnt = await BizService.saveUpdate(
+      // 최신 일비 조회
+      final dayPayRows = await BizService.search(
+        siq: "project.calDayPay",
+        outDs: "rtnList3",
+        params: {
+          "empId": userId,
+          "userId": userId,
+          "yearMonth": yearMonth,
+          "loadFlag": "Y",
+          "_mtd": "getList",
+        },
+      );
+
+      if (dayPayRows.isEmpty) {
+        if (!mounted) return;
+        _showMsg("최신 일비 계산에 실패했습니다.");
+        return;
+      }
+
+      final latestDayPay =
+          int.tryParse((dayPayRows.first["DAY_PAY"] ?? "0").toString()) ?? 0;
+
+      // 월 전체 상세내역 조회
+      final detailRows = await BizService.search(
+        siq: "project.receiptMng",
+        outDs: "rtnList",
+        params: {
+          "empId": userId,
+          "userId": userId,
+          "yearMonth": yearMonth,
+          "expenseCode": "",
+          "_mtd": "getList",
+        },
+      );
+
+      // 일비 최신값으로 변경
+      final saveRows = <Map<String, dynamic>>[];
+
+      for (final item in detailRows) {
+        final row = Map<String, dynamic>.from(item);
+        final projectCd = (row["PROJECT_CD"] ?? "").toString();
+        final expCd = (row["EXP_CD"] ?? "").toString();
+
+        if (projectCd == "Total" || projectCd == "Sub Total") continue;
+
+        if (expCd == "251") {
+          row["PRICE"] = latestDayPay;
+          row["USER_ID"] = userId;
+          row["GV_USER_ID"] = userId;
+          row["state"] = "updated";
+          saveRows.add(row);
+        }
+      }
+
+      if (saveRows.isNotEmpty) {
+        await BizService.save(
+          siq: "project.receiptMng",
+          outDs: "saveCnt",
+          rows: saveRows,
+          extraParams: {
+            "_mtd": "saveAll",
+            "sql": "N",
+            "gvTotal": "Total",
+            "gvSubTotal": "Sub Total",
+          },
+        );
+      }
+
+      final confirmRows = [
+        {
+          "userId": userId,
+          "confirm_yn": "Y",
+          "YEARMONTH": yearMonth,
+          "state": "updated",
+        }
+      ];
+
+      await BizService.saveUpdate(
         siq: "project.receiptConfirm",
         outDs: "saveCnt",
-        rows: rowData,
+        rows: confirmRows,
       );
 
       if (!mounted) return;
@@ -199,7 +268,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
       await _loadMonthData();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("확정되었습니다.")),
+        const SnackBar(content: Text("확정되었습니다.")),
       );
     } catch (e) {
       if (!mounted) return;

@@ -33,10 +33,10 @@ class ReceiptFileService {
   }) async {
     try {
       final sp = await _sessionParams();
-
-      final userId = (params["USER_ID"] ?? sp["GV_USER_ID"] ?? sp["USER_ID"] ?? "")
-          .toString()
-          .trim();
+      final paramUserId = (params["USER_ID"] ?? "").toString().trim();
+      final userId = paramUserId.isNotEmpty
+          ? paramUserId
+          : (sp["GV_USER_ID"] ?? sp["USER_ID"] ?? "").toString().trim();
       final yearMonthRaw = (params['YEARMONTH'] ?? '').toString();
       final yearMonth = yearMonthRaw.replaceAll(RegExp(r'[^0-9]'), '');
 
@@ -149,16 +149,20 @@ class ReceiptFileService {
     required String projectCd,
     required String dtlRecSeq,
     required String fileSeq,
+    String? userId,
   }) async {
     final sp = await _sessionParams();
+    final finalUserId = (userId ?? "").trim().isNotEmpty
+        ? userId!.trim()
+        : (sp["GV_USER_ID"] ?? sp["USER_ID"] ?? "").toString().trim();
 
     final payload = {
       ...sp,
       "PROJECT_CD": projectCd,
+      "USER_ID": finalUserId,
       "DTL_REC_SEQ": dtlRecSeq,
       "FILE_SEQ": fileSeq,
     };
-
     final res = await SessionDio.dio.post(
       "${Env.mobilePath}file/receiptDelete",
       data: payload,

@@ -575,6 +575,10 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
           ? null
           : (v) {
         if (v == null) return;
+        if (widget.projectCd == "DS" && v == "251") {
+          _showMsg("프로젝트를 다시 선택해주세요.");
+          return;
+        }
         setState(() {
           _selectedExpCd = v;
           // 일비 선택시, 자동 계산
