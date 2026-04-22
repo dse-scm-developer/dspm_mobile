@@ -73,7 +73,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
 
   String _selectedExpCd = "";
   List<CodeModel> _expenseCodes = [];
-  String? _selectedCreditCd;
+  String? _selectedCreditCd = "개인";
   final List<String> _creditOptions = ["개인", "법인"];
   String _empId = "";
   int _calculateDayPay = 0; // 일비
@@ -114,7 +114,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
       final dbValue = data!['CREDIT_CD'].toString();
       _selectedCreditCd = (dbValue == "CORPORATION") ? "법인" : "개인";
     } else {
-      _selectedCreditCd = null;
+      _selectedCreditCd = "개인";
     }
   }
 
@@ -129,7 +129,7 @@ class _ReceiptDetailPageState extends State<ReceiptDetailPage> {
           TranData(
             siq: "common.comCode",
             outDs: "expenseCodeList",
-            params: {"grpCd": "EXPENSE_ITEM_CODE"},
+            params: {"grpCd": "EXPENSE_CODE"},
           ),
           TranData(
             siq: "project.calDayPay", //일비

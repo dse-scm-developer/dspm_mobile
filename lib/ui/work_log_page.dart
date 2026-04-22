@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import '/features/biz/service/biz_service.dart';
 import '/features/biz/service/tran_data.dart';
 import '../../core/storage/app_session.dart';
-import '../../core/theme/app_theme.dart'; 
+import '../../core/theme/app_theme.dart';
 
 class _CellStyle {
   final bool editable;
@@ -29,7 +29,16 @@ class _WorkLogPageState extends State<WorkLogPage> {
   String _employeeName = "";
   String _empId = "";
 
-  DateTime _month = DateTime(DateTime.now().year, DateTime.now().month - 1);
+  DateTime _getDefaultMonth() {
+    final now = DateTime.now();
+
+    if(now.day <= 10) {
+      return DateTime(now.year, now.month -1, 1);
+    } else {
+      return DateTime(now.year, now.month, 1);
+    }
+  }
+  late DateTime _month;
 
   List<_WorkLogRow> _rows = [];
 
@@ -52,6 +61,7 @@ class _WorkLogPageState extends State<WorkLogPage> {
   @override
   void initState() {
     super.initState();
+    _month = _getDefaultMonth();
     _initSessionAndLoad();
   }
 
@@ -183,7 +193,7 @@ class _WorkLogPageState extends State<WorkLogPage> {
 
   List<DropdownMenuItem<String>> buildCodeItems(List<Map<String, dynamic>> rows) {
     final seen = <String>{};
-    return rows.where((r) {
+    final items = rows.where((r) {
       final code = (r["CODE_CD"] ?? "").toString().trim();
       if (code.isEmpty) return false;
       if (seen.contains(code)) return false;
@@ -197,6 +207,14 @@ class _WorkLogPageState extends State<WorkLogPage> {
         child: Text(name),
       );
     }).toList();
+
+    // 프로젝트 리스트에 빈 프로젝트 추가 - 주말이나 공휴일에 잘못 체크할 시 빈칸으로 두게끔
+    items.insert(0, const DropdownMenuItem<String>(
+      value: "",
+      child: Text(""),
+    ));
+
+    return items;
   }
 
   String? safeValue(String? current, List<Map<String, dynamic>> rows) {
@@ -236,13 +254,13 @@ class _WorkLogPageState extends State<WorkLogPage> {
     return {"104", "106", "107", "108", "109"}.contains(workCd);
   }
 
-  // ✅ 테이블용 색상: AppTheme 기반으로만 톤 정리
+  // 테이블용 색상: AppTheme 기반으로만 톤 정리
   _CellStyle _workTypeStyle(_WorkLogRow row) {
     const editBg = Color(0xFFFFF4C2); // 기존보다 덜 튀는 노랑(선택 영역 느낌)
     const red = Color(0xFFCC0000);
     const black = Colors.black;
 
-    final noneEditBg = AppTheme.softBg; // ✅ 통일
+    final noneEditBg = AppTheme.softBg;
 
     final confirm = (row.confirmFlag ?? "").trim();
     final vac = (row.vacFlag ?? "").trim();
@@ -365,13 +383,185 @@ class _WorkLogPageState extends State<WorkLogPage> {
     }
   }
 
+  void _applyBulk({
+    String? workType,
+    String? workArea,
+    String? project,
+    String? remark,
+  }) {
+    final selectedRows = _rows.where((r) => r.selected).toList();
+
+    if (selectedRows.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("선택된 날짜가 없습니다.")),
+      );
+      return;
+    }
+
+    setState(() {
+      for (final row in selectedRows) {
+        if ((row.confirmFlag ?? "").trim() == "Y") continue;
+
+        if (workType != null) {
+          row.workType = workType;
+
+          if (_offWorkTypeCodes.contains(workType)) {
+            row.workArea = "";
+            row.project = "";
+          }
+        }
+
+        if (workArea != null) {
+          row.workArea = workArea;
+        }
+
+        if (project != null) {
+          row.project = project;
+        }
+
+        if (remark != null) {
+          row.remark = remark;
+          row.remarkCtrl.text = remark;
+        }
+        row.isModified = true;
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("선택한 날짜에 일괄 적용했습니다.")),
+    );
+  }
+
+  Future<void> _showBulkApplyDialog() async {
+    final selectedCount = _rows.where((r) => r.selected).length;
+
+    if (selectedCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("먼저 적용할 날짜를 선택해주세요.")),
+      );
+      return;
+    }
+
+    String? workType;
+    String? workArea;
+    String? project;
+    final remarkCtrl = TextEditingController();
+
+    final workTypeItems = buildCodeItems(_workTypeRows);
+    final locationItems = buildCodeItems(_locationRows);
+    final projectItems = buildCodeItems(_projectRows);
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            return AlertDialog(
+              title: Text("일괄 적용 ($selectedCount건)"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      value: workType,
+                      decoration: const InputDecoration(
+                        labelText: "근무 형태",
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: "__skip__",
+                          child: Text("변경 안함"),
+                        ),
+                        ...workTypeItems,
+                      ],
+                      onChanged: (v) {
+                        setLocalState(() {
+                          workType = v == "__skip__" ? null : v;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: workArea,
+                      decoration: const InputDecoration(
+                        labelText: "근무 지역",
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: "__skip__",
+                          child: Text("변경 안함"),
+                        ),
+                        ...locationItems,
+                      ],
+                      onChanged: (v) {
+                        setLocalState(() {
+                          workArea = v == "__skip__" ? null : v;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: project,
+                      decoration: const InputDecoration(
+                        labelText: "프로젝트",
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: "__skip__",
+                          child: Text("변경 안함"),
+                        ),
+                        ...projectItems,
+                      ],
+                      onChanged: (v) {
+                        setLocalState(() {
+                          project = v == "__skip__" ? null : v;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: remarkCtrl,
+                      decoration: const InputDecoration(
+                        labelText: "비고",
+                        hintText: "비워두면 변경 안함",
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text("취소"),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text("적용"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (ok != true) return;
+
+    _applyBulk(
+      workType: workType,
+      workArea: workArea,
+      project: project,
+      remark: remarkCtrl.text.trim().isEmpty ? null : remarkCtrl.text.trim(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final monthTitle = DateFormat("yyyy-MM").format(_month);
     final isBusy = _loadingCodes || _loadingMonth;
 
     return Scaffold(
-      // ✅ background/appBar는 ThemeData(app_theme.dart)로
+      // background/appBar는 ThemeData(app_theme.dart)로
       appBar: AppBar(
         title: const Text("근무일지"),
         actions: [
@@ -389,6 +579,8 @@ class _WorkLogPageState extends State<WorkLogPage> {
             onSelected: (value) async {
               if (value == 'confirm') {
                 await _confirmAll();
+              } else if (value == 'bulk') {
+                await _showBulkApplyDialog();
               }
             },
             itemBuilder: (_) => const [
@@ -396,117 +588,121 @@ class _WorkLogPageState extends State<WorkLogPage> {
                 value: 'confirm',
                 child: Text('확정'),
               ),
+              PopupMenuItem<String>(
+                value: 'bulk',
+                child: Text('일괄 적용'),
+              ),
             ],
           ),
         ],
       ),
       body: Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppTheme.softBg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.border),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(9),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withOpacity(0.12),
-                    shape: BoxShape.circle,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.softBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.border),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.person_outline,
+                      color: AppTheme.primary,
+                      size: 18,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.person_outline,
-                    color: AppTheme.primary,
-                    size: 18,
+                  const SizedBox(width: 8),
+                  Text(
+                    "사원명: $_employeeName",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.ink,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  "사원명: $_employeeName",
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    color: AppTheme.ink,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.border),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        monthTitle,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          color: AppTheme.ink,
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.border),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          monthTitle,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: AppTheme.ink,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      InkWell(
-                        onTap: isBusy ? null : _pickMonth,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Icon(
-                          Icons.calendar_month_outlined,
-                          size: 18,
-                          color: isBusy ? Colors.grey : AppTheme.primary,
+                        const SizedBox(width: 6),
+                        InkWell(
+                          onTap: isBusy ? null : _pickMonth,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Icon(
+                            Icons.calendar_month_outlined,
+                            size: 18,
+                            color: isBusy ? Colors.grey : AppTheme.primary,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                if (isBusy)
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-              ],
+                  const SizedBox(width: 12),
+                  if (isBusy)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
 
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppTheme.border),
-                  color: Colors.white,
-                ),
-                child: Scrollbar(
-                  thumbVisibility: true,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(
-                      width: 980,
-                      child: ListView.builder(
-                        itemCount: _rows.length + 1,
-                        itemBuilder: (context, index) {
-                          if (index == 0) return _buildHeaderRow();
-                          final row = _rows[index - 1];
-                          return _buildDataRow(row, index - 1);
-                        },
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppTheme.border),
+                    color: Colors.white,
+                  ),
+                  child: Scrollbar(
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: 1030,
+                        child: ListView.builder(
+                          itemCount: _rows.length + 1,
+                          itemBuilder: (context, index) {
+                            if (index == 0) return _buildHeaderRow();
+                            final row = _rows[index - 1];
+                            return _buildDataRow(row, index - 1);
+                          },
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 
@@ -520,6 +716,7 @@ class _WorkLogPageState extends State<WorkLogPage> {
       ),
       child: const Row(
         children: [
+          _Cell(width: 48, child: _HeaderText("선택")),
           _Cell(width: 110, child: _HeaderText("날짜")),
           _Cell(width: 70, child: _HeaderText("요일")),
           _Cell(width: 150, child: _HeaderText("근무 형태")),
@@ -571,6 +768,17 @@ class _WorkLogPageState extends State<WorkLogPage> {
       ),
       child: Row(
         children: [
+          _Cell(
+            width: 48,
+            child: Checkbox(
+              value: row.selected,
+              onChanged: rowLocked ? null : (v) {
+                setState(() {
+                  row.selected = v ?? false;
+                });
+              },
+            ),
+          ),
           _Cell(
             width: 110,
             child: Text(dateStr, style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.ink)),
@@ -628,9 +836,9 @@ class _WorkLogPageState extends State<WorkLogPage> {
                     isExpanded: true,
                     icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
                     items: locationItems,
-                    onChanged: (v) { 
-                      setState(() { 
-                        row.workArea = v ?? ""; 
+                    onChanged: (v) {
+                      setState(() {
+                        row.workArea = v ?? "";
                         row.isModified = true;
                       });
                     },
@@ -656,7 +864,7 @@ class _WorkLogPageState extends State<WorkLogPage> {
                     icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
                     items: projectItems,
                     onChanged: (v) {
-                      setState(() { 
+                      setState(() {
                         row.project = v ?? "";
                         row.isModified = true;
                       });
@@ -691,7 +899,7 @@ class _WorkLogPageState extends State<WorkLogPage> {
                     disabledBorder: InputBorder.none,
                     hintText: "",
                   ),
-                  onChanged: (v) {  
+                  onChanged: (v) {
                     row.remark = v;
                     row.isModified = true;
                   },
@@ -716,7 +924,7 @@ class _HeaderText extends StatelessWidget {
       style: const TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w900,
-        color: AppTheme.ink, // ✅ 통일
+        color: AppTheme.ink,
       ),
     );
   }
@@ -746,6 +954,7 @@ class _WorkLogRow {
   final DateTime date;
 
   bool isModified = false;
+  bool selected = false;
 
   String? companyCd;
   String? buCd;
@@ -813,17 +1022,17 @@ class _WorkLogRow {
   }
 
   Map<String, dynamic> toSaveMap() => {
-        "COMPANY_CD": companyCd ?? "",
-        "BU_CD": buCd ?? "",
-        "EMP_ID": empId ?? "",
-        "EMP_NM": empNm ?? "",
-        "YEARMONTH": yearMonth ?? "",
-        "YYYYMMDD": yyyymmdd ?? DateFormat("yyyy-MM-dd").format(date),
-        "WORK_TYPE": workType,
-        "WORK_AREA": workArea,
-        "PROJECT_CD": project,
-        "REMARK": remark,
-        "CONFIRM_FLAG": confirmFlag ?? "",
-        "VAC_FLAG": vacFlag ?? "N",
-      };
+    "COMPANY_CD": companyCd ?? "",
+    "BU_CD": buCd ?? "",
+    "EMP_ID": empId ?? "",
+    "EMP_NM": empNm ?? "",
+    "YEARMONTH": yearMonth ?? "",
+    "YYYYMMDD": yyyymmdd ?? DateFormat("yyyy-MM-dd").format(date),
+    "WORK_TYPE": workType,
+    "WORK_AREA": workArea,
+    "PROJECT_CD": project,
+    "REMARK": remark,
+    "CONFIRM_FLAG": confirmFlag ?? "",
+    "VAC_FLAG": vacFlag ?? "N",
+  };
 }

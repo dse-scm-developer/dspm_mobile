@@ -15,7 +15,17 @@ class ReceiptPage extends StatefulWidget {
 }
 
 class _ReceiptPageState extends State<ReceiptPage> {
-  DateTime _month = DateTime(DateTime.now().year, DateTime.now().month - 1);
+
+  DateTime _getDefaultMonth() {
+    final now = DateTime.now();
+
+    if(now.day <= 10) {
+      return DateTime(now.year, now.month -1, 1);
+    } else {
+      return DateTime(now.year, now.month, 1);
+    }
+  }
+  late DateTime _month;
 
   bool _loading = true;
   List<Map<String, dynamic>> _projectList = []; // 프로젝트 리스트
@@ -26,6 +36,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
   @override
   void initState() {
     super.initState();
+    _month = _getDefaultMonth();
     _loadMonthData();
   }
 
